@@ -1,0 +1,59 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Participant {
+  id        Int      @id @default(autoincrement())
+  name      String
+  household Int
+  zip       String
+  createdAt DateTime @default(now())
+
+  // NEW RELATION
+  distributions Distribution[]
+}
+
+model Inventory {
+  id        Int      @id @default(autoincrement())
+  name      String
+  category  String
+  quantity  Int
+  expiry    DateTime
+
+  // NEW RELATION
+  distributions Distribution[]
+}
+
+model Volunteer {
+  id    Int    @id @default(autoincrement())
+  name  String
+  email String
+
+  // NEW RELATION
+  distributions Distribution[]
+}
+
+model Shift {
+  id        Int      @id @default(autoincrement())
+  date      DateTime
+  role      String
+  capacity  Int
+}
+
+model Distribution {
+  id            Int      @id @default(autoincrement())
+  participantId Int
+  inventoryId   Int
+  volunteerId   Int
+  quantity      Int
+  createdAt     DateTime @default(now())
+
+  participant Participant @relation(fields: [participantId], references: [id])
+  inventory   Inventory   @relation(fields: [inventoryId], references: [id])
+  volunteer   Volunteer   @relation(fields: [volunteerId], references: [id])
+}
