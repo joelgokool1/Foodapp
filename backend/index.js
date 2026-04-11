@@ -11,7 +11,7 @@ app.use(express.json());
 // =========================
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+  ssl: { rejectUnauthorized: false }
 });
 
 // =========================
@@ -24,8 +24,6 @@ app.get("/", (req, res) => {
 // =========================
 // PARTICIPANTS
 // =========================
-
-// GET ALL PARTICIPANTS
 app.get("/participants", async (req, res) => {
   try {
     const result = await pool.query(
@@ -33,12 +31,11 @@ app.get("/participants", async (req, res) => {
     );
     res.json(result.rows);
   } catch (err) {
-    console.error("DB ERROR:", err.message);
+    console.error("PARTICIPANT ERROR:", err);
     res.status(500).send("Database error");
   }
 });
 
-// ADD PARTICIPANT
 app.post("/participants", async (req, res) => {
   try {
     const { name, household, zip, repeat_visit } = req.body;
@@ -53,7 +50,7 @@ app.post("/participants", async (req, res) => {
 
     res.json(result.rows[0]);
   } catch (err) {
-    console.error("INSERT ERROR:", err.message);
+    console.error("INSERT ERROR:", err);
     res.status(500).send("Insert error");
   }
 });
@@ -61,8 +58,6 @@ app.post("/participants", async (req, res) => {
 // =========================
 // VOLUNTEERS
 // =========================
-
-// GET VOLUNTEERS
 app.get("/volunteers", async (req, res) => {
   try {
     const result = await pool.query(
@@ -70,12 +65,11 @@ app.get("/volunteers", async (req, res) => {
     );
     res.json(result.rows);
   } catch (err) {
-    console.error("VOL ERROR:", err.message);
+    console.error("VOL ERROR:", err);
     res.status(500).send("Error");
   }
 });
 
-// ADD VOLUNTEER
 app.post("/volunteers", async (req, res) => {
   try {
     const { name, role, shift_date } = req.body;
@@ -89,7 +83,7 @@ app.post("/volunteers", async (req, res) => {
 
     res.json(result.rows[0]);
   } catch (err) {
-    console.error("VOL INSERT ERROR:", err.message);
+    console.error("VOL INSERT ERROR:", err);
     res.status(500).send("Error");
   }
 });
@@ -106,17 +100,21 @@ app.get("/inventory", async (req, res) => {
     );
     res.json(result.rows);
   } catch (err) {
-    console.error("INVENTORY ERROR:", err.message);
+    console.error("INVENTORY ERROR:", err);
     res.status(500).send("Inventory error");
   }
 });
 
-// ADD INVENTORY (MATCHES FRONTEND)
+// ADD INVENTORY (MATCHES FRONTEND EXACTLY)
 app.post("/inventory", async (req, res) => {
   try {
     const { name, quantity_received, source } = req.body;
 
     console.log("Incoming inventory:", req.body);
+
+    if (!name || !quantity_received) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
 
     const result = await pool.query(
       `INSERT INTO "Inventory"
@@ -126,17 +124,23 @@ app.post("/inventory", async (req, res) => {
       [name, quantity_received, source]
     );
 
+    console.log("Saved:", result.rows[0]);
+
     res.json(result.rows[0]);
   } catch (err) {
-    console.error("INVENTORY INSERT ERROR:", err.message);
+    console.error("INVENTORY INSERT ERROR:", err);
     res.status(500).send("Insert error");
   }
 });
 
-// USE / DISTRIBUTE INVENTORY
+// DISTRIBUTE INVENTORY
 app.post("/inventory/distribute", async (req, res) => {
   try {
     const { inventory_id, quantity_used } = req.body;
+
+    if (!inventory_id || !quantity_used) {
+      return res.status(400).json({ error: "Missing fields" });
+    }
 
     await pool.query(
       `UPDATE "Inventory"
@@ -147,7 +151,7 @@ app.post("/inventory/distribute", async (req, res) => {
 
     res.json({ success: true });
   } catch (err) {
-    console.error("DISTRIBUTE ERROR:", err.message);
+    console.error("DISTRIBUTE ERROR:", err);
     res.status(500).send("Distribute error");
   }
 });
@@ -155,7 +159,6 @@ app.post("/inventory/distribute", async (req, res) => {
 // =========================
 // SERVER START
 // =========================
-
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, "0.0.0.0", () => {
