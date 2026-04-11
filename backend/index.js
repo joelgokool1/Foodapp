@@ -186,6 +186,40 @@ app.get("/reports/summary", async (req, res) => {
   }
 });
 
+app.get("/reports/dashboard", async (req, res) => {
+  try {
+
+    const participants = await pool.query(`
+      SELECT COUNT(*) as households,
+             SUM(household) as individuals
+      FROM "Participant"
+    `);
+
+    const distribution = await pool.query(`
+      SELECT SUM(quantity_used) as total_distributed
+      FROM "Distribution"
+    `);
+
+    const inventory = await pool.query(`
+      SELECT SUM(quantity_received) as total_received,
+             SUM(remaining_quantity) as total_remaining
+      FROM "Inventory"
+    `);
+
+    res.json({
+      households: participants.rows[0].households || 0,
+      individuals: participants.rows[0].individuals || 0,
+      total_distributed: distribution.rows[0].total_distributed || 0,
+      total_received: inventory.rows[0].total_received || 0,
+      total_remaining: inventory.rows[0].total_remaining || 0
+    });
+
+  } catch (err) {
+    console.error("DASHBOARD ERROR:", err);
+    res.status(500).send("Error");
+  }
+});
+
 // =========================
 // SERVER START
 // =========================
