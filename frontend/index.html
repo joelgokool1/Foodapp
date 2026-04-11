@@ -100,23 +100,50 @@ th { background:#333; color:white; }
 const API = "https://foodapp-zhu2.onrender.com";
 
 // ================= INTAKE =================
+
 async function loadData(){
   const res = await fetch(API + "/participants");
   const data = await res.json();
+
+  const filter = document.getElementById("dateFilter")?.value || "today";
+  const now = new Date();
+
+  function isMatch(dateStr){
+    const d = new Date(dateStr);
+
+    if(filter === "today") return d.toDateString() === now.toDateString();
+
+    if(filter === "week"){
+      const weekAgo = new Date();
+      weekAgo.setDate(now.getDate() - 7);
+      return d >= weekAgo;
+    }
+
+    if(filter === "month"){
+      return d.getMonth() === now.getMonth() &&
+             d.getFullYear() === now.getFullYear();
+    }
+
+    return true;
+  }
+
+  const filtered = data.filter(p => p.visit_date && isMatch(p.visit_date));
 
   const tbody = document.getElementById("tbody");
   tbody.innerHTML = "";
 
   let h=0,i=0;
 
-  data.forEach(p=>{
+  filtered.forEach(p=>{
     h++;
     i+=p.household;
 
-    tbody.innerHTML += `<tr>
+    tbody.innerHTML += `
+    <tr>
       <td>${p.id}</td>
       <td>${p.name||""}</td>
       <td>${p.household}</td>
+      <td><button onclick="deleteParticipant(${p.id})">Delete</button></td>
     </tr>`;
   });
 
@@ -146,11 +173,16 @@ form.addEventListener("submit", async e=>{
 async function loadVolunteers(){
   const res = await fetch(API + "/volunteers");
   const data = await res.json();
+const today = new Date().toISOString().split("T")[0];
+
+const filtered = data.filter(v =>
+  v.shift_date && v.shift_date.startsWith(today)
+);
 
   const table = document.getElementById("volTable");
   table.innerHTML="";
 
-  data.forEach(v=>{
+ filtered.forEach(v=>{
     table.innerHTML += `<tr>
       <td>${v.name}</td>
       <td>${v.role||""}</td>
@@ -282,7 +314,7 @@ window.onload = ()=>{
   loadData();
   loadVolunteers();
   loadInventory();
-  loadReport();   // ✅ ADD THIS
+  loadReport();   
 };
 
 async function loadReport() {
@@ -309,6 +341,61 @@ async function loadReport() {
   }
 }
 
+async function exportAll(){
+  try {
+    const res = await fetch(API + "/reports/full");
+    const data = await res.json();
+
+    const blob = new Blob(
+      [JSON.stringify(data, null, 2)],
+      { type: "application/json" }
+    );
+
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "full_report.json";
+    a.click();
+
+  } catch (err) {
+    console.error("Export error:", err);
+  }
+}
+
+<button onclick="exportAll()">Export Full Report</button>
+
+async function deleteParticipant(id){
+  await fetch(API + "/participants/" + id, {method:"DELETE"});
+  loadData();
+}
+
+async function deleteVolunteer(id){
+  await fetch(API + "/volunteers/" + id, {method:"DELETE"});
+  loadVolunteers();
+}
+
+async function deleteInventory(id){
+  await fetch(API + "/inventory/" + id, {method:"DELETE"});
+  loadInventory();
+}
+
+<div class="card">
+  <h2>Dashboard</h2>
+  <canvas id="chart"></canvas>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+
 </script>
 </body>
+<div class="card">
+  <h2>Filter Data</h2>
+
+  <select id="dateFilter" onchange="reloadAll()">
+    <option value="today">Today</option>
+    <option value="week">This Week</option>
+    <option value="month">This Month</option>
+    <option value="all">All Time</option>
+  </select>
+</div>
 </html>

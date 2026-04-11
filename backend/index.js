@@ -256,6 +256,47 @@ app.get("/reports/full", async (req, res) => {
   }
 });
 
+app.delete("/participants/:id", async (req,res)=>{
+  await pool.query('DELETE FROM "Participant" WHERE id=$1',[req.params.id]);
+  res.json({success:true});
+});
+
+app.delete("/volunteers/:id", async (req,res)=>{
+  await pool.query('DELETE FROM "Volunteers" WHERE id=$1',[req.params.id]);
+  res.json({success:true});
+});
+
+app.delete("/inventory/:id", async (req,res)=>{
+  await pool.query('DELETE FROM "Inventory" WHERE id=$1',[req.params.id]);
+  res.json({success:true});
+});
+
+async function loadChart(){
+  const res = await fetch(API + "/reports/dashboard");
+  const data = await res.json();
+
+  new Chart(document.getElementById("chart"), {
+    type: "bar",
+    data: {
+      labels: ["Households","Individuals","Distributed"],
+      datasets: [{
+        label: "Totals",
+        data: [
+          data.households,
+          data.individuals,
+          data.total_distributed
+        ]
+      }]
+    }
+  });
+}
+window.onload = ()=>{
+  loadData();
+  loadVolunteers();
+  loadInventory();
+  loadReport();
+  loadChart();
+};
 // =========================
 // SERVER START
 // =========================
