@@ -9,9 +9,8 @@ app.use(express.json());
 // =========================
 // DATABASE CONNECTION
 // =========================
-
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || "postgresql://postgres:foodapp@localhost:5432/foodapp",
+  connectionString: process.env.DATABASE_URL,
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
 });
 
@@ -26,10 +25,12 @@ app.get("/", (req, res) => {
 // PARTICIPANTS
 // =========================
 
-// GET ALL
+// GET ALL PARTICIPANTS
 app.get("/participants", async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM "Participant" ORDER BY id DESC');
+    const result = await pool.query(
+      'SELECT * FROM "Participant" ORDER BY id DESC'
+    );
     res.json(result.rows);
   } catch (err) {
     console.error("DB ERROR:", err.message);
@@ -42,13 +43,6 @@ app.post("/participants", async (req, res) => {
   try {
     const { name, household, zip, repeat_visit } = req.body;
 
-    const countResult = await pool.query(`
-      SELECT COUNT(*) FROM "Participant"
-      WHERE DATE(visit_date) = CURRENT_DATE
-    `);
-
-    const dailyId = parseInt(countResult.rows[0].count) + 1;
-
     const result = await pool.query(
       `INSERT INTO "Participant"
        (name, household, zip, repeat_visit, visit_date)
@@ -57,11 +51,7 @@ app.post("/participants", async (req, res) => {
       [name || null, household, zip, repeat_visit || false]
     );
 
-    res.json({
-      ...result.rows[0],
-      daily_id: dailyId
-    });
-
+    res.json(result.rows[0]);
   } catch (err) {
     console.error("INSERT ERROR:", err.message);
     res.status(500).send("Insert error");
@@ -69,10 +59,41 @@ app.post("/participants", async (req, res) => {
 });
 
 // =========================
-// INVENTORY
+// VOLUNTEERS
 // =========================
 
-// GET INVENTORY
+// GET VOLUNTEERS
+app.get("/volunteers", async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM "Volunteers" ORDER BY shift_date DESC'
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("VOL ERROR:", err.message);
+    res.status(500).send("Error");
+  }
+});
+
+// ADD VOLUNTEER
+app.post("/volunteers", async (req, res) => {
+  try {
+    const { name, role, shift_date } = req.body;
+
+    const result = await pool.query(
+      `INSERT INTO "Volunteers"(name, role, shift_date)
+       VALUES ($1,$2,$3)
+       RETURNING *`,
+      [name || "Volunteer", role, shift_date]
+    );
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("VOL INSERT ERROR:", err.message);
+    res.status(500).send("Error");
+  }
+});
+
 // =========================
 // INVENTORY
 // =========================
@@ -80,7 +101,9 @@ app.post("/participants", async (req, res) => {
 // GET INVENTORY
 app.get("/inventory", async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM "Inventory" ORDER BY id DESC');
+    const result = await pool.query(
+      'SELECT * FROM "Inventory" ORDER BY id DESC'
+    );
     res.json(result.rows);
   } catch (err) {
     console.error("INVENTORY ERROR:", err.message);
@@ -88,7 +111,7 @@ app.get("/inventory", async (req, res) => {
   }
 });
 
-// ADD INVENTORY (FIXED TO MATCH FRONTEND)
+// ADD INVENTORY (MATCHES FRONTEND)
 app.post("/inventory", async (req, res) => {
   try {
     const { name, quantity_received, source } = req.body;
@@ -96,26 +119,24 @@ app.post("/inventory", async (req, res) => {
     console.log("Incoming inventory:", req.body);
 
     const result = await pool.query(
-      `INSERT INTO "Inventory" (name, quantity_received, remaining_quantity, source)
+      `INSERT INTO "Inventory"
+       (name, quantity_received, remaining_quantity, source)
        VALUES ($1, $2, $2, $3)
        RETURNING *`,
       [name, quantity_received, source]
     );
 
     res.json(result.rows[0]);
-
   } catch (err) {
     console.error("INVENTORY INSERT ERROR:", err.message);
     res.status(500).send("Insert error");
   }
 });
 
-// 🔥 ADD THIS (YOU DID NOT HAVE IT BEFORE)
+// USE / DISTRIBUTE INVENTORY
 app.post("/inventory/distribute", async (req, res) => {
   try {
     const { inventory_id, quantity_used } = req.body;
-
-    console.log("Distribute:", req.body);
 
     await pool.query(
       `UPDATE "Inventory"
@@ -125,68 +146,14 @@ app.post("/inventory/distribute", async (req, res) => {
     );
 
     res.json({ success: true });
-
   } catch (err) {
     console.error("DISTRIBUTE ERROR:", err.message);
     res.status(500).send("Distribute error");
   }
 });
 
-// ADD INVENTORY ITEM
-app.post("/inventory", async (req, res) => {
-  try {
-    const { name, category, quantity, expiry } = req.body;
-
-    const result = await pool.query(
-      `INSERT INTO "Inventory" (name, category, quantity, expiry)
-       VALUES ($1, $2, $3, $4)
-       RETURNING *`,
-      [name, category, quantity, expiry]
-    );
-
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error("INVENTORY INSERT ERROR:", err.message);
-    res.status(500).send("Insert error");
-  }
-});
-
 // =========================
-// VOLUNTEERS / SHIFTS
-// =========================
-
-// GET SHIFTS
-app.get("/shifts", async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM "Volunteers" ORDER BY shift_date DESC');
-    res.json(result.rows);
-  } catch (err) {
-    console.error("SHIFT ERROR:", err.message);
-    res.status(500).send("Shift error");
-  }
-});
-
-// ADD SHIFT
-app.post("/shifts", async (req, res) => {
-  try {
-    const { name, role, shift_date, capacity } = req.body;
-
-    const result = await pool.query(
-      `INSERT INTO "Volunteers"(name, role, shift_date, capacity)
-       VALUES ($1,$2,$3,$4)
-       RETURNING *`,
-      [name || "Volunteer", role, shift_date, capacity || 0]
-    );
-
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error("SHIFT INSERT ERROR:", err.message);
-    res.status(500).send("Insert error");
-  }
-});
-
-// =========================
-// SERVER START (IMPORTANT)
+// SERVER START
 // =========================
 
 const PORT = process.env.PORT || 5000;
