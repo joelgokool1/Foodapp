@@ -105,18 +105,16 @@ app.get("/inventory", async (req, res) => {
   }
 });
 
-// ADD INVENTORY (MATCHES FRONTEND EXACTLY)
+// ADD INVENTORY
 app.post("/inventory", async (req, res) => {
   try {
     let { name, quantity_received, source } = req.body;
 
     console.log("Incoming inventory:", req.body);
 
-    // 🔥 FORCE CORRECT TYPES
     quantity_received = parseInt(quantity_received);
 
     if (!name || isNaN(quantity_received)) {
-      console.log("INVALID DATA:", req.body);
       return res.status(400).json({ error: "Invalid input data" });
     }
 
@@ -143,6 +141,10 @@ app.post("/inventory/distribute", async (req, res) => {
   try {
     const { inventory_id, quantity_used } = req.body;
 
+    if (!inventory_id || !quantity_used) {
+      return res.status(400).json({ error: "Missing fields" });
+    }
+
     await pool.query(
       `UPDATE "Inventory"
        SET remaining_quantity = remaining_quantity - $1
@@ -150,7 +152,6 @@ app.post("/inventory/distribute", async (req, res) => {
       [quantity_used, inventory_id]
     );
 
-    // 🔥 NEW: track distribution
     await pool.query(
       `INSERT INTO "Distribution"(inventory_id, quantity_used)
        VALUES ($1,$2)`,
@@ -160,11 +161,12 @@ app.post("/inventory/distribute", async (req, res) => {
     res.json({ success: true });
 
   } catch (err) {
-    console.error(err);
+    console.error("DISTRIBUTE ERROR:", err);
     res.status(500).send("Error");
   }
 });
-// 🔥 ADD THIS RIGHT HERE
+
+// REPORT
 app.get("/reports/summary", async (req, res) => {
   try {
     const result = await pool.query(`

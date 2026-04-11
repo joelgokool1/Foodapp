@@ -37,6 +37,21 @@ th { background:#333; color:white; }
 </table>
 </div>
 
+<!-- ✅ REPORT GOES HERE -->
+<div class="card">
+  <h2>Distribution Report</h2>
+  <button onclick="loadReport()">Load Report</button>
+
+  <table border="1">
+    <thead>
+      <tr>
+        <th>Item</th>
+        <th>Total Used</th>
+      </tr>
+    </thead>
+    <tbody id="reportTable"></tbody>
+  </table>
+</div>
 <div class="card">
 <h2>Volunteers</h2>
 
@@ -245,7 +260,8 @@ async function useItem(id){
       body: JSON.stringify(payload)
     });
 
-    loadInventory();
+   loadInventory();
+loadReport();   
 
   } catch (err) {
     console.error("Use inventory error:", err);
@@ -266,9 +282,33 @@ window.onload = ()=>{
   loadData();
   loadVolunteers();
   loadInventory();
+  loadReport();   // ✅ ADD THIS
 };
 
-</script>
+async function loadReport() {
+  try {
+    const res = await fetch(API + "/reports/summary");
+    const data = await res.json();
 
+    const table = document.getElementById("reportTable");
+    table.innerHTML = "";
+
+    data.forEach(row => {
+      const tr = document.createElement("tr");
+
+      tr.innerHTML = `
+        <td>${row.name}</td>
+        <td>${row.total_used}</td>
+      `;
+
+      table.appendChild(tr);
+    });
+
+  } catch (err) {
+    console.error("Report load error:", err);
+  }
+}
+
+</script>
 </body>
 </html>
