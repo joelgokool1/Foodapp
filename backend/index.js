@@ -220,6 +220,42 @@ app.get("/reports/dashboard", async (req, res) => {
   }
 });
 
+app.get("/reports/full", async (req, res) => {
+  try {
+
+    const participants = await pool.query(`
+      SELECT * FROM "Participant"
+      ORDER BY visit_date DESC
+    `);
+
+    const volunteers = await pool.query(`
+      SELECT * FROM "Volunteers"
+      ORDER BY shift_date DESC
+    `);
+
+    const inventory = await pool.query(`
+      SELECT * FROM "Inventory"
+      ORDER BY id DESC
+    `);
+
+    const distribution = await pool.query(`
+      SELECT * FROM "Distribution"
+      ORDER BY distributed_at DESC
+    `);
+
+    res.json({
+      participants: participants.rows,
+      volunteers: volunteers.rows,
+      inventory: inventory.rows,
+      distribution: distribution.rows
+    });
+
+  } catch (err) {
+    console.error("FULL REPORT ERROR:", err);
+    res.status(500).send("Error");
+  }
+});
+
 // =========================
 // SERVER START
 // =========================
