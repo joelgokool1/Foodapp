@@ -143,10 +143,6 @@ app.post("/inventory/distribute", async (req, res) => {
   try {
     const { inventory_id, quantity_used } = req.body;
 
-    if (!inventory_id || !quantity_used) {
-      return res.status(400).json({ error: "Missing fields" });
-    }
-
     await pool.query(
       `UPDATE "Inventory"
        SET remaining_quantity = remaining_quantity - $1
@@ -154,10 +150,37 @@ app.post("/inventory/distribute", async (req, res) => {
       [quantity_used, inventory_id]
     );
 
+    // 🔥 NEW: track distribution
+    await pool.query(
+      `INSERT INTO "Distribution"(inventory_id, quantity_used)
+       VALUES ($1,$2)`,
+      [inventory_id, quantity_used]
+    );
+
     res.json({ success: true });
+
   } catch (err) {
-    console.error("DISTRIBUTE ERROR:", err);
-    res.status(500).send("Distribute error");
+    console.error(err);
+    res.status(500).send("Error");
+  }
+});
+// 🔥 ADD THIS RIGHT HERE
+app.get("/reports/summary", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        i.name,
+        SUM(d.quantity_used) as total_used
+      FROM "Distribution" d
+      JOIN "Inventory" i ON i.id = d.inventory_id
+      GROUP BY i.name
+    `);
+
+    res.json(result.rows);
+
+  } catch (err) {
+    console.error("REPORT ERROR:", err);
+    res.status(500).send("Error generating report");
   }
 });
 

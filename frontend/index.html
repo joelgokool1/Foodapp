@@ -199,13 +199,13 @@ document.getElementById("inventoryForm").addEventListener("submit", async e=>{
   e.preventDefault();
 
   try {
-  
-const payload = {
+
+ const payload = {
   name: item_name.value,
-  category: source.value,
-  quantity: parseInt(quantity_received.value),
-  expiry: new Date()
-};
+  quantity_received: parseInt(quantity_received.value),
+  source: source.value
+}; 
+
     console.log("Adding inventory:", payload);
 
     await fetch(API + "/inventory",{
