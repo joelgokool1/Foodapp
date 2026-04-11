@@ -108,12 +108,16 @@ app.get("/inventory", async (req, res) => {
 // ADD INVENTORY (MATCHES FRONTEND EXACTLY)
 app.post("/inventory", async (req, res) => {
   try {
-    const { name, quantity_received, source } = req.body;
+    let { name, quantity_received, source } = req.body;
 
     console.log("Incoming inventory:", req.body);
 
-    if (!name || !quantity_received) {
-      return res.status(400).json({ error: "Missing required fields" });
+    // 🔥 FORCE CORRECT TYPES
+    quantity_received = parseInt(quantity_received);
+
+    if (!name || isNaN(quantity_received)) {
+      console.log("INVALID DATA:", req.body);
+      return res.status(400).json({ error: "Invalid input data" });
     }
 
     const result = await pool.query(
@@ -121,15 +125,16 @@ app.post("/inventory", async (req, res) => {
        (name, quantity_received, remaining_quantity, source)
        VALUES ($1, $2, $2, $3)
        RETURNING *`,
-      [name, quantity_received, source]
+      [name, quantity_received, source || "unknown"]
     );
 
-    console.log("Saved:", result.rows[0]);
+    console.log("SAVED TO DB:", result.rows[0]);
 
     res.json(result.rows[0]);
+
   } catch (err) {
-    console.error("INVENTORY INSERT ERROR:", err);
-    res.status(500).send("Insert error");
+    console.error("INSERT FAILED:", err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
