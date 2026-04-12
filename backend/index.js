@@ -31,8 +31,8 @@ app.get("/participants", async (req, res) => {
     );
     res.json(result.rows);
   } catch (err) {
-    console.error("PARTICIPANT ERROR:", err);
-    res.status(500).send("Database error");
+    console.error(err);
+    res.status(500).send("Error");
   }
 });
 
@@ -50,8 +50,8 @@ app.post("/participants", async (req, res) => {
 
     res.json(result.rows[0]);
   } catch (err) {
-    console.error("INSERT ERROR:", err);
-    res.status(500).send("Insert error");
+    console.error(err);
+    res.status(500).send("Error");
   }
 });
 
@@ -65,7 +65,7 @@ app.get("/volunteers", async (req, res) => {
     );
     res.json(result.rows);
   } catch (err) {
-    console.error("VOL ERROR:", err);
+    console.error(err);
     res.status(500).send("Error");
   }
 });
@@ -83,7 +83,7 @@ app.post("/volunteers", async (req, res) => {
 
     res.json(result.rows[0]);
   } catch (err) {
-    console.error("VOL INSERT ERROR:", err);
+    console.error(err);
     res.status(500).send("Error");
   }
 });
@@ -91,8 +91,6 @@ app.post("/volunteers", async (req, res) => {
 // =========================
 // INVENTORY
 // =========================
-
-// GET INVENTORY
 app.get("/inventory", async (req, res) => {
   try {
     const result = await pool.query(
@@ -100,22 +98,19 @@ app.get("/inventory", async (req, res) => {
     );
     res.json(result.rows);
   } catch (err) {
-    console.error("INVENTORY ERROR:", err);
-    res.status(500).send("Inventory error");
+    console.error(err);
+    res.status(500).send("Error");
   }
 });
 
-// ADD INVENTORY
 app.post("/inventory", async (req, res) => {
   try {
     let { name, quantity_received, source } = req.body;
 
-    console.log("Incoming inventory:", req.body);
-
     quantity_received = parseInt(quantity_received);
 
     if (!name || isNaN(quantity_received)) {
-      return res.status(400).json({ error: "Invalid input data" });
+      return res.status(400).json({ error: "Invalid input" });
     }
 
     const result = await pool.query(
@@ -126,24 +121,19 @@ app.post("/inventory", async (req, res) => {
       [name, quantity_received, source || "unknown"]
     );
 
-    console.log("SAVED TO DB:", result.rows[0]);
-
     res.json(result.rows[0]);
-
   } catch (err) {
-    console.error("INSERT FAILED:", err.message);
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).send("Error");
   }
 });
 
-// DISTRIBUTE INVENTORY
+// =========================
+// DISTRIBUTION
+// =========================
 app.post("/inventory/distribute", async (req, res) => {
   try {
     const { inventory_id, quantity_used } = req.body;
-
-    if (!inventory_id || !quantity_used) {
-      return res.status(400).json({ error: "Missing fields" });
-    }
 
     await pool.query(
       `UPDATE "Inventory"
@@ -161,37 +151,34 @@ app.post("/inventory/distribute", async (req, res) => {
     res.json({ success: true });
 
   } catch (err) {
-    console.error("DISTRIBUTE ERROR:", err);
+    console.error(err);
     res.status(500).send("Error");
   }
 });
 
-// REPORT
+// =========================
+// REPORTS
+// =========================
 app.get("/reports/summary", async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT 
-        i.name,
-        SUM(d.quantity_used) as total_used
+      SELECT i.name, SUM(d.quantity_used) as total_used
       FROM "Distribution" d
       JOIN "Inventory" i ON i.id = d.inventory_id
       GROUP BY i.name
     `);
 
     res.json(result.rows);
-
   } catch (err) {
-    console.error("REPORT ERROR:", err);
-    res.status(500).send("Error generating report");
+    console.error(err);
+    res.status(500).send("Error");
   }
 });
 
 app.get("/reports/dashboard", async (req, res) => {
   try {
-
     const participants = await pool.query(`
-      SELECT COUNT(*) as households,
-             SUM(household) as individuals
+      SELECT COUNT(*) as households, SUM(household) as individuals
       FROM "Participant"
     `);
 
@@ -200,48 +187,24 @@ app.get("/reports/dashboard", async (req, res) => {
       FROM "Distribution"
     `);
 
-    const inventory = await pool.query(`
-      SELECT SUM(quantity_received) as total_received,
-             SUM(remaining_quantity) as total_remaining
-      FROM "Inventory"
-    `);
-
     res.json({
       households: participants.rows[0].households || 0,
       individuals: participants.rows[0].individuals || 0,
-      total_distributed: distribution.rows[0].total_distributed || 0,
-      total_received: inventory.rows[0].total_received || 0,
-      total_remaining: inventory.rows[0].total_remaining || 0
+      total_distributed: distribution.rows[0].total_distributed || 0
     });
 
   } catch (err) {
-    console.error("DASHBOARD ERROR:", err);
+    console.error(err);
     res.status(500).send("Error");
   }
 });
 
 app.get("/reports/full", async (req, res) => {
   try {
-
-    const participants = await pool.query(`
-      SELECT * FROM "Participant"
-      ORDER BY visit_date DESC
-    `);
-
-    const volunteers = await pool.query(`
-      SELECT * FROM "Volunteers"
-      ORDER BY shift_date DESC
-    `);
-
-    const inventory = await pool.query(`
-      SELECT * FROM "Inventory"
-      ORDER BY id DESC
-    `);
-
-    const distribution = await pool.query(`
-      SELECT * FROM "Distribution"
-      ORDER BY distributed_at DESC
-    `);
+    const participants = await pool.query('SELECT * FROM "Participant"');
+    const volunteers = await pool.query('SELECT * FROM "Volunteers"');
+    const inventory = await pool.query('SELECT * FROM "Inventory"');
+    const distribution = await pool.query('SELECT * FROM "Distribution"');
 
     res.json({
       participants: participants.rows,
@@ -251,11 +214,14 @@ app.get("/reports/full", async (req, res) => {
     });
 
   } catch (err) {
-    console.error("FULL REPORT ERROR:", err);
+    console.error(err);
     res.status(500).send("Error");
   }
 });
 
+// =========================
+// DELETE ROUTES
+// =========================
 app.delete("/participants/:id", async (req,res)=>{
   await pool.query('DELETE FROM "Participant" WHERE id=$1',[req.params.id]);
   res.json({success:true});
@@ -271,32 +237,6 @@ app.delete("/inventory/:id", async (req,res)=>{
   res.json({success:true});
 });
 
-async function loadChart(){
-  const res = await fetch(API + "/reports/dashboard");
-  const data = await res.json();
-
-  new Chart(document.getElementById("chart"), {
-    type: "bar",
-    data: {
-      labels: ["Households","Individuals","Distributed"],
-      datasets: [{
-        label: "Totals",
-        data: [
-          data.households,
-          data.individuals,
-          data.total_distributed
-        ]
-      }]
-    }
-  });
-}
-window.onload = ()=>{
-  loadData();
-  loadVolunteers();
-  loadInventory();
-  loadReport();
-  loadChart();
-};
 // =========================
 // SERVER START
 // =========================
