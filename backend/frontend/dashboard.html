@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Food Distribution System</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- CHART LIBRARY -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    body { font-family: Arial; margin:0; padding:10px; background:#f5f6fa; }
+    h2 { text-align:center; }
+
+    .tabs { display:flex; gap:5px; margin-bottom:15px; }
+    .tabs button {
+      flex:1; padding:10px; border:none;
+      background:#2d3436; color:white; cursor:pointer;
+    }
+
+    .card {
+      background:white; padding:15px;
+      margin-bottom:15px; border-radius:8px;
+    }
+
+    input { width:100%; padding:8px; margin-bottom:8px; }
+    button { padding:10px; background:#0984e3; color:white; border:none; width:100%; }
+
+    table { width:100%; background:white; border-collapse:collapse; }
+    td, th { padding:8px; border:1px solid #ddd; }
+  </style>
+</head>
+
+<body>
+
+<h2>📦 Food Distribution System</h2>
+
+<!-- LOGIN -->
+<div id="loginScreen" class="card">
+  <h3>🔐 Login</h3>
+  <input id="username" placeholder="Username">
+  <input id="password" type="password" placeholder="Password">
+  <button onclick="login()">Login</button>
+</div>
+
+<!-- MAIN APP -->
+<div id="app" style="display:none;">
+
+<div class="tabs">
+  <button onclick="showTab('dashboard')">Dashboard</button>
+  <button onclick="showTab('intake')">Intake</button>
+  <button onclick="showTab('inventory')">Inventory</button>
+  <button onclick="showTab('schedule')">Scheduling</button>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard" class="tab">
+  <div class="card">
+    Households: <span id="households">0</span><br>
+    Individuals: <span id="individuals">0</span>
+  </div>
+
+  <canvas id="chart"></canvas>
+
+  <button onclick="exportCSV()">Export CSV</button>
+
+  <table id="table">
+    <thead>
+      <tr>
+        <th>ID</th><th>Name</th><th>Household</th>
+        <th>Zip</th><th>Returning</th><th>Date</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<!-- INTAKE -->
+<div id="intake" class="tab" style="display:none;">
+  <form id="form" class="card">
+    <input id="name" placeholder="Name">
+    <input id="household" placeholder="Household Size">
+    <input id="zip" placeholder="Zip">
+    <label>Returning? <input type="checkbox" id="repeat"></label>
+    <button>Check In</button>
+  </form>
+  <p id="status"></p>
+</div>
+
+<!-- INVENTORY -->
+<div id="inventory" class="tab" style="display:none;">
+  <form id="inventoryForm" class="card">
+    <input id="itemName" placeholder="Item Name">
+    <input id="category" placeholder="Category">
+    <input id="quantity" placeholder="Quantity">
+    <button>Add Item</button>
+  </form>
+  <div id="inventoryList"></div>
+</div>
+
+<!-- SCHEDULING -->
+<div id="schedule" class="tab" style="display:none;">
+  <form id="shiftForm" class="card">
+    <input type="datetime-local" id="shiftDate">
+    <input id="role" placeholder="Role">
+    <input id="capacity" placeholder="Capacity">
+    <button>Create Shift</button>
+  </form>
+  <div id="shiftList"></div>
+</div>
+
+</div>
+
+<script>
+
+const API = "https://unlapped-offenselessly-krish.ngrok-free.dev";
+
+let chart;
+
+// LOGIN
+function login() {
+  const user = document.getElementById("username").value;
+  const pass = document.getElementById("password").value;
+
+  if (user === "admin" && pass === "admin") {
+    document.getElementById("loginScreen").style.display = "none";
+    document.getElementById("app").style.display = "block";
+    init();
+  } else {
+    alert("Invalid login");
+  }
+}
+
+// TABS
+function showTab(tabId) {
+  document.querySelectorAll(".tab").forEach(t => t.style.display="none");
+  document.getElementById(tabId).style.display = "block";
+}
+
+// LOAD PARTICIPANTS
+async function loadParticipants() {
+  const res = await fetch(API + "/participants");
+  const data = await res.json();
+
+  const tbody = document.querySelector("#table tbody");
+  tbody.innerHTML = "";
+
+  let households = 0;
+  let individuals = 0;
+
+  data.forEach(p => {
+    households++;
+    individuals += p.household;
+
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${p.id}</td>
+      <td>${p.name || ""}</td>
+      <td>${p.household}</td>
+      <td>${p.zip}</td>
+      <td>${p.repeat_visit ? "Yes":"No"}</td>
+      <td>${p.visit_date ? new Date(p.visit_date).toLocaleString():""}</td>
+    `;
+    tbody.appendChild(row);
+  });
+
+  document.getElementById("households").innerText = households;
+  document.getElementById("individuals").innerText = individuals;
+
+  updateChart(households, individuals);
+}
+
+// CHART
+function updateChart(h, i) {
+  const ctx = document.getElementById("chart");
+
+  if (chart) chart.destroy();
+
+  chart = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: ["Households", "Individuals"],
+      datasets: [{
+        label: "Distribution",
+        data: [h, i]
+      }]
+    }
+  });
+}
+
+// EXPORT CSV
+function exportCSV() {
+  const rows = document.querySelectorAll("#table tr");
+  let csv = [];
+
+  rows.forEach(row => {
+    const cols = row.querySelectorAll("td, th");
+    let rowData = [];
+    cols.forEach(col => rowData.push(col.innerText));
+    csv.push(rowData.join(","));
+  });
+
+  const blob = new Blob([csv.join("\n")]);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "data.csv";
+  a.click();
+}
+
+// INTAKE
+document.getElementById("form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const data = {
+    name: document.getElementById("name").value,
+    household: parseInt(document.getElementById("household").value),
+    zip: document.getElementById("zip").value,
+    repeat_visit: document.getElementById("repeat").checked
+  };
+
+  const res = await fetch(API + "/participants", {
+    method:"POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify(data)
+  });
+
+  const result = await res.json();
+  document.getElementById("status").innerText = "Added ID: " + result.id;
+
+  e.target.reset();
+  loadParticipants();
+});
+
+// INVENTORY
+async function loadInventory() {
+  const res = await fetch(API + "/inventory");
+  const data = await res.json();
+
+  const list = document.getElementById("inventoryList");
+  list.innerHTML = "";
+
+  data.forEach(i => {
+    const div = document.createElement("div");
+    div.innerText = `${i.name} | ${i.category} | Qty:${i.quantity}`;
+    list.appendChild(div);
+  });
+}
+
+document.getElementById("inventoryForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const data = {
+    name: itemName.value,
+    category: category.value,
+    quantity: parseInt(quantity.value),
+    expiry: new Date()
+  };
+
+  await fetch(API + "/inventory", {
+    method:"POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify(data)
+  });
+
+  e.target.reset();
+  loadInventory();
+});
+
+// SHIFTS
+async function loadShifts() {
+  const res = await fetch(API + "/shifts");
+  const data = await res.json();
+
+  const list = document.getElementById("shiftList");
+  list.innerHTML = "";
+
+  data.forEach(s => {
+    const div = document.createElement("div");
+    div.innerText = `${new Date(s.date).toLocaleString()} | ${s.role}`;
+    list.appendChild(div);
+  });
+}
+
+document.getElementById("shiftForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const data = {
+    date: new Date(shiftDate.value),
+    role: role.value,
+    capacity: parseInt(capacity.value)
+  };
+
+  await fetch(API + "/shifts", {
+    method:"POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify(data)
+  });
+
+  e.target.reset();
+  loadShifts();
+});
+
+// INIT
+function init() {
+  loadParticipants();
+  loadInventory();
+  loadShifts();
+}
+
+</script>
+
+</body>
+</html>

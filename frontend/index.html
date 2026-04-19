@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Food Distribution Dashboard</title>
+
+<style>
+body { font-family: Arial; background:#f4f6f8; padding:10px; }
+.card { background:white; padding:15px; margin-bottom:15px; border-radius:10px; }
+input, button { width:100%; padding:10px; margin:5px 0; }
+button { background:#007bff; color:white; border:none; }
+table { width:100%; border-collapse:collapse; margin-top:10px; }
+th, td { border:1px solid #ddd; padding:6px; }
+th { background:#333; color:white; }
+</style>
+</head>
+
+<body>
+
+<div class="card">
+<h2>Intake</h2>
+<form id="form">
+<input id="name" placeholder="Name">
+<input id="zip" placeholder="ZIP">
+<label><input type="checkbox" id="repeat"> Repeat Visit</label>
+<button>Submit</button>
+</form>
+<p>Households: <span id="households">0</span></p>
+<p>Individuals: <span id="individuals">0</span></p>
+</div>
+
+<div class="card">
+<h2>Volunteers</h2>
+<form id="volForm">
+<input id="volName" placeholder="Name" required>
+<input id="volRole" placeholder="Role">
+<input id="volDate" type="date" required>
+<button>Add Volunteer</button>
+</form>
+
+<table>
+<thead><tr><th>Name</th><th>Role</th><th>Date</th></tr></thead>
+<tbody id="volTable"></tbody>
+</table>
+</div>
+
+<div class="card">
+<h2>Inventory</h2>
+<form id="inventoryForm">
+<input id="item_name" placeholder="Item Name" required>
+<input id="boxes" type="number" placeholder="Boxes" required>
+<input id="per_box" type="number" placeholder="Items per Box" required>
+<input id="source" placeholder="Source">
+<button>Add Inventory</button>
+</form>
+
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Boxes Start</th>
+<th>Remaining Boxes</th>
+<th>Used</th>
+<th>Update</th>
+</tr>
+</thead>
+<tbody id="inventoryTable"></tbody>
+</table>
+</div>
+
+<script>
+const API = "https://foodapp-zhu2.onrender.com";
+
+// retry
+async function api(url, options){
+  for(let i=0;i<2;i++){
+    try{
+      const res = await fetch(API+url, options);
+      if(res.ok) return res;
+    }catch(e){}
+    await new Promise(r=>setTimeout(r,2000));
+  }
+  throw new Error("API fail");
+}
+
+// ================= INTAKE =================
+form.onsubmit = async e=>{
+  e.preventDefault();
+  await api("/participants",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({
+      name:name.value,
+      zip:zip.value,
+      repeat_visit:repeat.checked
+    })
+  });
+  form.reset();
+  loadParticipants();
+};
+
+async function loadParticipants(){
+  const res = await api("/participants");
+  const data = await res.json();
+  households.innerText = data.length;
+  individuals.innerText = data.reduce((a,b)=>a+(b.household||0),0);
+}
+
+// ================= VOLUNTEERS =================
+volForm.onsubmit = async e=>{
+  e.preventDefault();
+  await api("/volunteers",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({
+      name:volName.value,
+      role:volRole.value,
+      shift_date:volDate.value
+    })
+  });
+  volForm.reset();
+  loadVolunteers();
+};
+
+async function loadVolunteers(){
+  const res = await api("/volunteers");
+  const data = await res.json();
+  volTable.innerHTML="";
+  data.forEach(v=>{
+    volTable.innerHTML += `
+    <tr>
+      <td>${v.name}</td>
+      <td>${v.role||""}</td>
+      <td>${v.shift_date}</td>
+    </tr>`;
+  });
+}
+
+// ================= INVENTORY =================
+inventoryForm.onsubmit = async e=>{
+  e.preventDefault();
+  await api("/inventory",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({
+      name:item_name.value,
+      number_of_boxes:parseInt(boxes.value),
+      items_per_box:parseInt(per_box.value),
+      source:source.value
+    })
+  });
+  inventoryForm.reset();
+  loadInventory();
+};
+
+async function loadInventory(){
+  const res = await api("/inventory");
+  const data = await res.json();
+
+  inventoryTable.innerHTML="";
+
+  data.forEach(item=>{
+    const remainingBoxes = Math.ceil(item.remaining_quantity/item.items_per_box);
+    const used = item.number_of_boxes - remainingBoxes;
+
+    inventoryTable.innerHTML += `
+    <tr>
+      <td>${item.name}</td>
+      <td>${item.number_of_boxes}</td>
+      <td>${remainingBoxes}</td>
+      <td>${used}</td>
+      <td>
+        <input id="r-${item.id}" type="number" placeholder="Remaining">
+        <button onclick="updateUsage(${item.id},${item.items_per_box})">Save</button>
+      </td>
+    </tr>`;
+  });
+}
+
+async function updateUsage(id, perBox){
+  const val = document.getElementById(`r-${id}`).value;
+  if(!val) return alert("Enter remaining boxes");
+
+  const qty = parseInt(val)*perBox;
+
+  await api("/inventory/reset",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({id, remaining_quantity:qty})
+  });
+
+  loadInventory();
+}
+
+// INIT
+window.onload = ()=>{
+  loadParticipants();
+  loadVolunteers();
+  loadInventory();
+};
+</script>
+
+</body>
+</html>

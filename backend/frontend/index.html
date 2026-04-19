@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Food Distribution Intake</title>
+</head>
+<body>
+
+  <h2>Participant Intake Form</h2>
+
+  <form id="form">
+    <label>Name:</label><br>
+    <input type="text" id="name" required><br><br>
+
+    <label>Household Size:</label><br>
+    <input type="number" id="household" required><br><br>
+
+    <label>Zip Code:</label><br>
+    <input type="text" id="zip" required><br><br>
+
+    <button type="submit">Submit</button>
+  </form>
+
+  <p id="status"></p>
+
+  <script>
+    const form = document.getElementById("form");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const data = {
+        name: document.getElementById("name").value,
+        household: parseInt(document.getElementById("household").value),
+        zip: document.getElementById("zip").value
+      };
+
+      const res = await fetch("http://localhost:5000/participants", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(data)
+      });
+
+      const result = await res.json();
+
+      document.getElementById("status").innerText =
+        "Added: " + result.name;
+
+      form.reset();
+    });
+  </script>
+
+</body>
+</html>
