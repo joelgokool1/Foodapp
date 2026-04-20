@@ -8,12 +8,14 @@ app.use(express.json());
 
 // ✅ DATABASE
 const pool = new Pool({
-  connectionString: "postgresql://foodappdb_olki_user:Y6b4XjgkuJ1ph8DIrjezAJ0lMG2xVnVV@dpg-d7colffaqgkc73fdted0-a.virginia-postgres.render.com:5432/foodapp_db_vgik",
+  connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
 // ================= INIT =================
 async function init() {
+
+  // PARTICIPANTS
   await pool.query(`
     CREATE TABLE IF NOT EXISTS participants (
       id SERIAL PRIMARY KEY,
@@ -23,14 +25,26 @@ async function init() {
       repeat_visit BOOLEAN,
       visit_date TIMESTAMP DEFAULT NOW()
     );
+  `);
 
+  // 🔥 FORCE FIX (important)
+  await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS household INT`);
+  await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS zip TEXT`);
+  await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS repeat_visit BOOLEAN`);
+  await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS visit_date TIMESTAMP DEFAULT NOW()`);
+
+  // VOLUNTEERS
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS volunteers (
       id SERIAL PRIMARY KEY,
       name TEXT,
       role TEXT,
       shift_date DATE
     );
+  `);
 
+  // INVENTORY
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS inventory (
       id SERIAL PRIMARY KEY,
       name TEXT,
@@ -39,7 +53,13 @@ async function init() {
       source TEXT,
       created_at TIMESTAMP DEFAULT NOW()
     );
+  `);
 
+  await pool.query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS quantity_received INT`);
+  await pool.query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS remaining_quantity INT`);
+
+  // DISTRIBUTION
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS distribution (
       id SERIAL PRIMARY KEY,
       inventory_id INT,
@@ -48,7 +68,7 @@ async function init() {
     );
   `);
 
-  console.log("✅ Tables ready");
+  console.log("✅ Tables FIXED and ready");
 }
 init();
 
