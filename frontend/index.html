@@ -4,33 +4,120 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Food Distribution Dashboard</title>
 
+<!-- 🔥 ADD THESE TWO LINES -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#007bff">
+
+<style>
+
+<style>
 <style>
 body { font-family: Arial; background:#f4f6f8; padding:10px; }
-.card { background:white; padding:15px; margin-bottom:15px; border-radius:10px; }
-input, button { width:100%; padding:10px; margin:5px 0; }
-button { background:#007bff; color:white; border:none; }
-table { width:100%; border-collapse:collapse; margin-top:10px; }
-th, td { border:1px solid #ddd; padding:6px; }
+
+.card { 
+  background:white; 
+  padding:15px; 
+  margin-bottom:15px; 
+  border-radius:10px; 
+}
+
+input, button, select { 
+  width:100%; 
+  padding:12px; 
+  margin:6px 0; 
+  font-size:16px;
+}
+
+button {
+  background:#007bff;
+  color:white;
+  border:none;
+  border-radius:6px;
+}
+
+button:hover {
+  background:#0056b3;
+}
+
+table { 
+  width:100%; 
+  border-collapse:collapse; 
+  margin-top:10px; 
+  font-size:14px;
+}
+
+th, td { 
+  border:1px solid #ddd; 
+  padding:6px; 
+}
+
 th { background:#333; color:white; }
+
+/* 📱 MOBILE FIX */
+@media (max-width:600px){
+  table, thead, tbody, th, td, tr {
+    display:block;
+  }
+
+  td {
+    border:none;
+    border-bottom:1px solid #ddd;
+  }
+}
+</style>
 </style>
 </head>
 
 <body>
 
+<!-- FILTER -->
+<div class="card">
+  <h2>Filter</h2>
+  <select id="dateFilter" onchange="reloadAll()">
+    <option value="today">Today</option>
+    <option value="week">This Week</option>
+    <option value="month">This Month</option>
+    <option value="all">All Time</option>
+  </select>
+</div>
+
+<!-- DASHBOARD -->
+<div class="card">
+  <h2>Dashboard</h2>
+  <canvas id="chart"></canvas>
+</div>
+
+<!-- EXPORT -->
+<button onclick="exportAll()">Export Full Report (Excel)</button>
+
+<!-- INTAKE -->
 <div class="card">
 <h2>Intake</h2>
+
 <form id="form">
 <input id="name" placeholder="Name">
-<input id="zip" placeholder="ZIP">
+<input id="household" type="number" placeholder="Household Size" required>
+
+<input id="zip" value="07030">
 <label><input type="checkbox" id="repeat"> Repeat Visit</label>
 <button>Submit</button>
 </form>
+
 <p>Households: <span id="households">0</span></p>
 <p>Individuals: <span id="individuals">0</span></p>
+
+<table>
+<thead>
+<tr><th>ID</th><th>Name</th><th>Household</th><th>Action</th></tr>
+</thead>
+<tbody id="tbody"></tbody>
+</table>
 </div>
 
+<!-- VOLUNTEERS -->
 <div class="card">
 <h2>Volunteers</h2>
+
 <form id="volForm">
 <input id="volName" placeholder="Name" required>
 <input id="volRole" placeholder="Role">
@@ -39,17 +126,21 @@ th { background:#333; color:white; }
 </form>
 
 <table>
-<thead><tr><th>Name</th><th>Role</th><th>Date</th></tr></thead>
+<thead>
+<tr><th>Name</th><th>Role</th><th>Date</th><th>Action</th></tr>
+</thead>
 <tbody id="volTable"></tbody>
 </table>
 </div>
 
+<!-- INVENTORY -->
 <div class="card">
 <h2>Inventory</h2>
+
 <form id="inventoryForm">
 <input id="item_name" placeholder="Item Name" required>
-<input id="boxes" type="number" placeholder="Boxes" required>
-<input id="per_box" type="number" placeholder="Items per Box" required>
+<input id="boxes_start" type="number" placeholder="Number of Boxes" required>
+<input id="items_per_box" type="number" placeholder="Items per Box" required>
 <input id="source" placeholder="Source">
 <button>Add Inventory</button>
 </form>
@@ -57,147 +148,356 @@ th { background:#333; color:white; }
 <table>
 <thead>
 <tr>
+<th>ID</th>
 <th>Item</th>
 <th>Boxes Start</th>
-<th>Remaining Boxes</th>
-<th>Used</th>
-<th>Update</th>
+<th>Items/Box</th>
+<th>Quantity Start</th>
+<th>Boxes End</th>
+<th>Food Served</th>
+<th>Action</th>
 </tr>
 </thead>
 <tbody id="inventoryTable"></tbody>
 </table>
 </div>
 
+<!-- REPORT -->
+<div class="card">
+<h2>Distribution Report</h2>
+<button onclick="loadReport()">Refresh Report</button>
+
+<table>
+<thead>
+<tr><th>ID</th><th>Item</th><th>Total Used</th></tr>
+</thead>
+<tbody id="reportTable"></tbody>
+</table>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <script>
 const API = "https://foodapp-zhu2.onrender.com";
 
-// retry
-async function api(url, options){
-  for(let i=0;i<2;i++){
-    try{
-      const res = await fetch(API+url, options);
-      if(res.ok) return res;
-    }catch(e){}
-    await new Promise(r=>setTimeout(r,2000));
+// ================= FILTER =================
+function isMatch(dateStr){
+  const filter = document.getElementById("dateFilter").value;
+  const now = new Date();
+  const d = new Date(dateStr);
+
+  if(filter === "today") return d.toDateString() === now.toDateString();
+
+  if(filter === "week"){
+    const weekAgo = new Date();
+    weekAgo.setDate(now.getDate() - 7);
+    return d >= weekAgo;
   }
-  throw new Error("API fail");
+
+  if(filter === "month"){
+    return d.getMonth() === now.getMonth() &&
+           d.getFullYear() === now.getFullYear();
+  }
+
+  return true;
 }
 
-// ================= INTAKE =================
-form.onsubmit = async e=>{
+// ================= PARTICIPANTS =================
+async function loadData(){
+  const res = await fetch(API + "/participants");
+  const data = await res.json();
+
+  const filtered = data.filter(p => p.visit_date && isMatch(p.visit_date));
+
+  const tbody = document.getElementById("tbody");
+  tbody.innerHTML = "";
+
+  let h=0,i=0;
+
+  filtered.forEach(p=>{
+    h++;
+    i+=p.household;
+
+    tbody.innerHTML += `
+    <tr>
+      <td>${p.id}</td>
+      <td>${p.name||""}</td>
+      <td>${p.household}</td>
+      <td><button onclick="deleteParticipant(${p.id})">Delete</button></td>
+    </tr>`;
+  });
+
+  households.innerText = h;
+  individuals.innerText = i;
+}
+
+form.addEventListener("submit", async e=>{
   e.preventDefault();
-  await api("/participants",{
+
+  await fetch(API + "/participants",{
     method:"POST",
     headers:{"Content-Type":"application/json"},
     body: JSON.stringify({
-      name:name.value,
-      zip:zip.value,
-      repeat_visit:repeat.checked
+      name: name.value,
+      household: parseInt(household.value),
+      zip: zip.value,
+      repeat_visit: repeat.checked
     })
   });
-  form.reset();
-  loadParticipants();
-};
 
-async function loadParticipants(){
-  const res = await api("/participants");
-  const data = await res.json();
-  households.innerText = data.length;
-  individuals.innerText = data.reduce((a,b)=>a+(b.household||0),0);
-}
+  form.reset();
+  loadData();
+});
 
 // ================= VOLUNTEERS =================
-volForm.onsubmit = async e=>{
-  e.preventDefault();
-  await api("/volunteers",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({
-      name:volName.value,
-      role:volRole.value,
-      shift_date:volDate.value
-    })
-  });
-  volForm.reset();
-  loadVolunteers();
-};
-
 async function loadVolunteers(){
-  const res = await api("/volunteers");
+  const res = await fetch(API + "/volunteers");
   const data = await res.json();
-  volTable.innerHTML="";
-  data.forEach(v=>{
-    volTable.innerHTML += `
-    <tr>
+
+  const filtered = data.filter(v => v.shift_date && isMatch(v.shift_date));
+
+  const table = document.getElementById("volTable");
+  table.innerHTML="";
+
+  filtered.forEach(v=>{
+    table.innerHTML += `<tr>
       <td>${v.name}</td>
       <td>${v.role||""}</td>
       <td>${v.shift_date}</td>
+      <td><button onclick="deleteVolunteer(${v.id})">Delete</button></td>
     </tr>`;
   });
 }
 
-// ================= INVENTORY =================
-inventoryForm.onsubmit = async e=>{
+
+volForm.addEventListener("submit", async e=>{
   e.preventDefault();
-  await api("/inventory",{
+
+  // ✅ VALIDATION
+  if (!volDate.value) {
+    alert("Please select a date");
+    return;
+  }
+
+  const payload = {
+    name: volName.value,
+    role: volRole.value,
+    shift_date: volDate.value
+  };
+
+  console.log("Sending volunteer:", payload);
+
+  const res = await fetch(API + "/volunteers",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify(payload)
+  });
+
+  const data = await res.json();
+  console.log("Response:", data);
+
+  volForm.reset();
+  loadVolunteers();
+});
+
+// ================= INVENTORY =================
+async function loadInventory(){
+  const res = await fetch(API + "/inventory");
+  const data = await res.json();
+
+  const table = document.getElementById("inventoryTable");
+  table.innerHTML = "";
+
+ data.forEach(item=>{
+  const qtyStart = item.boxes_start * item.items_per_box;
+  const boxesEnd = item.boxes_end || 0;
+  const qtyEnd = boxesEnd * item.items_per_box;
+  const served = qtyStart - qtyEnd;
+
+  table.innerHTML += `
+  <tr>
+    <td>${item.id}</td>
+    <td>${item.name}</td>
+    <td>${item.boxes_start}</td>
+    <td>${item.items_per_box}</td>
+    <td>${qtyStart}</td>
+  <td>
+  <input 
+    id="end-${item.id}" 
+    type="number" 
+    value="${boxesEnd}"
+    oninput="calculateServed(${item.id}, ${item.boxes_start}, ${item.items_per_box})"
+  >
+  <button onclick="updateEnd(${item.id})">Save</button>
+</td>
+
+<td id="served-${item.id}">${served}</td>
+    </tr>`;
+  });
+}
+
+inventoryForm.addEventListener("submit", async e=>{
+  e.preventDefault();
+
+  if (!boxes_start.value || !items_per_box.value) {
+    alert("Enter number of boxes and items per box");
+    return;
+  }
+
+  await fetch(API + "/inventory",{
     method:"POST",
     headers:{"Content-Type":"application/json"},
     body: JSON.stringify({
-      name:item_name.value,
-      number_of_boxes:parseInt(boxes.value),
-      items_per_box:parseInt(per_box.value),
-      source:source.value
+      name: item_name.value.trim(),
+      boxes_start: Number(boxes_start.value),
+      items_per_box: Number(items_per_box.value),
+      source: source.value || ""
     })
   });
+
   inventoryForm.reset();
   loadInventory();
-};
+});
 
-async function loadInventory(){
-  const res = await api("/inventory");
+
+
+// ================= REPORT =================
+async function loadReport(){
+  const res = await fetch(API + "/reports/summary");
   const data = await res.json();
 
-  inventoryTable.innerHTML="";
-
-  data.forEach(item=>{
-    const remainingBoxes = Math.ceil(item.remaining_quantity/item.items_per_box);
-    const used = item.number_of_boxes - remainingBoxes;
-
-    inventoryTable.innerHTML += `
+  const table = document.getElementById("reportTable");
+  table.innerHTML="";
+data.forEach(r=>{
+  table.innerHTML += `
     <tr>
-      <td>${item.name}</td>
-      <td>${item.number_of_boxes}</td>
-      <td>${remainingBoxes}</td>
-      <td>${used}</td>
-      <td>
-        <input id="r-${item.id}" type="number" placeholder="Remaining">
-        <button onclick="updateUsage(${item.id},${item.items_per_box})">Save</button>
-      </td>
+      <td>${r.id}</td>
+      <td>${r.name}</td>
+      <td>${r.total_used}</td>
     </tr>`;
+});
+  
+}
+
+// ================= DASHBOARD =================
+async function loadChart(){
+  const res = await fetch(API + "/reports/dashboard");
+  const data = await res.json();
+
+  new Chart(document.getElementById("chart"), {
+    type: "bar",
+    data: {
+      labels: ["Households","Individuals","Distributed"],
+      datasets: [{
+        label: "Totals",
+        data: [data.households, data.individuals, data.total_distributed]
+      }]
+    }
   });
 }
 
-async function updateUsage(id, perBox){
-  const val = document.getElementById(`r-${id}`).value;
-  if(!val) return alert("Enter remaining boxes");
+// ================= EXPORT =================
+async function exportAll(){
+  const res = await fetch(API + "/reports/full");
+  const data = await res.json();
 
-  const qty = parseInt(val)*perBox;
+  let csv = "TYPE,NAME,VALUE1,VALUE2,DATE\n";
 
-  await api("/inventory/reset",{
+  data.participants.forEach(p=>{
+    csv += `Participant,${p.name},${p.household},,${p.visit_date}\n`;
+  });
+
+  data.volunteers.forEach(v=>{
+    csv += `Volunteer,${v.name},${v.role},,${v.shift_date}\n`;
+  });
+
+data.inventory.forEach(i=>{
+  const start = i.boxes_start * i.items_per_box;
+  const end = (i.boxes_end || 0) * i.items_per_box;
+  const served = start - end;
+
+  csv += `Inventory,${i.name},${start},${served},${i.created_at}\n`;
+});
+  data.distribution.forEach(d=>{
+    csv += `Distribution,,${d.quantity_used},${d.inventory_id},${d.distributed_at}\n`;
+  });
+
+  const blob = new Blob([csv], {type:"text/csv"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "report.csv";
+  a.click();
+}
+
+// ================= DELETE =================
+async function deleteParticipant(id){
+  await fetch(API + "/participants/"+id,{method:"DELETE"});
+  loadData();
+}
+async function deleteVolunteer(id){
+  await fetch(API + "/volunteers/"+id,{method:"DELETE"});
+  loadVolunteers();
+}
+async function deleteInventory(id){
+  await fetch(API + "/inventory/"+id,{method:"DELETE"});
+  loadInventory();
+}
+
+
+// ✅ ADD THIS RIGHT HERE
+async function updateEnd(id){
+  const val = Number(document.getElementById(`end-${id}`).value) || 0;
+
+  const row = document.getElementById(`end-${id}`).closest("tr");
+  const boxesStart = Number(row.children[2].innerText);
+
+  if (val > boxesStart) {
+    alert("Boxes End cannot be greater than Boxes Start");
+    return;
+  }
+
+  await fetch(API + "/inventory/update-end",{
     method:"POST",
     headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({id, remaining_quantity:qty})
+    body: JSON.stringify({
+      id: id,
+      boxes_end: val
+    })
   });
 
   loadInventory();
 }
 
-// INIT
+function calculateServed(id, boxesStart, perBox){
+  const endVal = parseInt(document.getElementById(`end-${id}`).value) || 0;
+
+  const qtyStart = boxesStart * perBox;
+  const qtyEnd = endVal * perBox;
+  const served = qtyStart - qtyEnd;
+
+  document.getElementById(`served-${id}`).innerText = served;
+}
+// ================= INIT =================
+function reloadAll(){
+  loadData();
+  loadVolunteers();
+  loadReport();
+}
+
 window.onload = ()=>{
-  loadParticipants();
+  loadData();
   loadVolunteers();
   loadInventory();
+  loadReport();
+  loadChart();
 };
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js")
+    .then(() => console.log("SW registered"))
+    .catch(err => console.log("SW error", err));
+}
+
 </script>
 
 </body>
