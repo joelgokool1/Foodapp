@@ -26,7 +26,10 @@ async function init() {
       visit_date TIMESTAMP DEFAULT NOW()
     );
   `);
-
+await pool.query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS boxes_start INT`);
+await pool.query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS items_per_box INT`);
+await pool.query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS boxes_end INT DEFAULT 0`);
+await pool.query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`);
   // VOLUNTEERS
   await pool.query(`
     CREATE TABLE IF NOT EXISTS volunteers (
@@ -220,27 +223,34 @@ app.get("/reports/full", async (req, res) => {
   try {
     const participants = await pool.query(`SELECT * FROM participants`);
     const volunteers = await pool.query(`SELECT * FROM volunteers`);
+
     const inventory = await pool.query(`
-      SELECT *,
-      (boxes_start * items_per_box) AS quantity_start,
-      (COALESCE(boxes_end,0) * items_per_box) AS quantity_end,
-      ((boxes_start * items_per_box) - (COALESCE(boxes_end,0) * items_per_box)) AS food_served
+      SELECT 
+        id,
+        name,
+        COALESCE(boxes_start,0) as boxes_start,
+        COALESCE(items_per_box,0) as items_per_box,
+        COALESCE(boxes_end,0) as boxes_end,
+        created_at,
+
+        (COALESCE(boxes_start,0) * COALESCE(items_per_box,0)) AS quantity_start,
+        (COALESCE(boxes_end,0) * COALESCE(items_per_box,0)) AS quantity_end,
+        ((COALESCE(boxes_start,0) * COALESCE(items_per_box,0)) 
+        - (COALESCE(boxes_end,0) * COALESCE(items_per_box,0))) AS food_served
+
       FROM inventory
     `);
-
-    // ✅ ADD THIS (prevents crash)
-    const distribution = []; 
 
     res.json({
       participants: participants.rows,
       volunteers: volunteers.rows,
       inventory: inventory.rows,
-      distribution: distribution   // 🔥 REQUIRED FIX
+      distribution: []   // 🔥 prevents frontend crash
     });
 
   } catch (err) {
-    console.error("EXPORT ERROR:", err);
-    res.status(500).json({ error: "Export failed" });
+    console.error("🔥 EXPORT ERROR:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
