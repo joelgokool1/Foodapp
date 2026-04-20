@@ -6,7 +6,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ✅ DATABASE
+// DATABASE
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
@@ -16,22 +16,17 @@ const pool = new Pool({
 async function init() {
 
   // PARTICIPANTS
-await pool.query(`
-  CREATE TABLE IF NOT EXISTS participants (
-    id SERIAL PRIMARY KEY,
-    name TEXT,
-    household INT,
-    zip TEXT,
-    repeat_visit BOOLEAN,
-    visit_date TIMESTAMP DEFAULT NOW()
-  );
-`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS participants (
+      id SERIAL PRIMARY KEY,
+      name TEXT,
+      household INT,
+      zip TEXT,
+      repeat_visit BOOLEAN,
+      visit_date TIMESTAMP DEFAULT NOW()
+    );
+  `);
 
-// 🔥 REQUIRED FIX
-await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS repeat_visit BOOLEAN`);
-await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS household INT`);
-await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS zip TEXT`);
-await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS visit_date TIMESTAMP DEFAULT NOW()`);
   // VOLUNTEERS
   await pool.query(`
     CREATE TABLE IF NOT EXISTS volunteers (
@@ -42,32 +37,20 @@ await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS visit_date T
     );
   `);
 
-  // INVENTORY
+  // INVENTORY (NEW SYSTEM)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS inventory (
       id SERIAL PRIMARY KEY,
       name TEXT,
-      quantity_received INT,
-      remaining_quantity INT,
+      boxes_start INT,
+      items_per_box INT,
+      boxes_end INT DEFAULT 0,
       source TEXT,
       created_at TIMESTAMP DEFAULT NOW()
     );
   `);
 
-  await pool.query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS quantity_received INT`);
-  await pool.query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS remaining_quantity INT`);
-
-  // DISTRIBUTION
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS distribution (
-      id SERIAL PRIMARY KEY,
-      inventory_id INT,
-      quantity_used INT,
-      distributed_at TIMESTAMP DEFAULT NOW()
-    );
-  `);
-
-  console.log("✅ Tables FIXED and ready");
+  console.log("✅ Tables ready");
 }
 init();
 
@@ -76,18 +59,21 @@ app.post("/participants", async (req, res) => {
   try {
     const { name, household, zip, repeat_visit } = req.body;
 
-    const h = parseInt(household) || 0;
-
     await pool.query(
       `INSERT INTO participants (name, household, zip, repeat_visit)
        VALUES ($1,$2,$3,$4)`,
-      [name || "", h, zip || "", repeat_visit || false]
+      [
+        name || "",
+        parseInt(household) || 0,
+        zip || "",
+        repeat_visit || false
+      ]
     );
 
     res.json({ success: true });
 
   } catch (err) {
-    console.error("❌ PARTICIPANT ERROR:", err);
+    console.error(err);
     res.status(500).json({ error: "Participant save failed" });
   }
 });
@@ -116,7 +102,7 @@ app.post("/volunteers", async (req, res) => {
     res.json({ success: true });
 
   } catch (err) {
-    console.error("❌ VOLUNTEER ERROR:", err);
+    console.error(err);
     res.status(500).json({ error: "Volunteer save failed" });
   }
 });
@@ -132,72 +118,77 @@ app.delete("/volunteers/:id", async (req, res) => {
 });
 
 // ================= INVENTORY =================
+
+// ADD INVENTORY
 app.post("/inventory", async (req, res) => {
   try {
-    const { name, quantity_received, source } = req.body;
-
-    const qty = parseInt(quantity_received) || 0;
+    const { name, boxes_start, items_per_box, source } = req.body;
 
     await pool.query(
-      `INSERT INTO inventory (name, quantity_received, remaining_quantity, source)
-       VALUES ($1,$2,$2,$3)`,
-      [name || "", qty, source || ""]
+      `INSERT INTO inventory (name, boxes_start, items_per_box, source)
+       VALUES ($1,$2,$3,$4)`,
+      [
+        name || "",
+        parseInt(boxes_start) || 0,
+        parseInt(items_per_box) || 0,
+        source || ""
+      ]
     );
 
     res.json({ success: true });
 
   } catch (err) {
-    console.error("❌ INVENTORY ERROR:", err);
+    console.error(err);
     res.status(500).json({ error: "Inventory save failed" });
   }
 });
 
+// GET INVENTORY
 app.get("/inventory", async (req, res) => {
-  const data = await pool.query(`SELECT * FROM inventory ORDER BY id DESC`);
+  const data = await pool.query(`
+    SELECT *,
+    (boxes_start * items_per_box) AS quantity_start,
+    (COALESCE(boxes_end,0) * items_per_box) AS quantity_end,
+    ((boxes_start * items_per_box) - (COALESCE(boxes_end,0) * items_per_box)) AS food_served
+    FROM inventory
+    ORDER BY id DESC
+  `);
+
   res.json(data.rows);
 });
 
+// UPDATE END OF DAY
+app.post("/inventory/update-end", async (req, res) => {
+  try {
+    const { id, boxes_end } = req.body;
+
+    await pool.query(
+      `UPDATE inventory SET boxes_end=$1 WHERE id=$2`,
+      [parseInt(boxes_end) || 0, id]
+    );
+
+    res.json({ success: true });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Update failed" });
+  }
+});
+
+// DELETE
 app.delete("/inventory/:id", async (req, res) => {
   await pool.query(`DELETE FROM inventory WHERE id=$1`, [req.params.id]);
   res.json({ success: true });
 });
 
-// ================= DISTRIBUTE =================
-app.post("/inventory/distribute", async (req, res) => {
-  try {
-    const { inventory_id, quantity_used } = req.body;
-
-    const qty = parseInt(quantity_used) || 0;
-
-    await pool.query(
-      `INSERT INTO distribution (inventory_id, quantity_used)
-       VALUES ($1,$2)`,
-      [inventory_id, qty]
-    );
-
-    await pool.query(
-      `UPDATE inventory
-       SET remaining_quantity = remaining_quantity - $1
-       WHERE id=$2`,
-      [qty, inventory_id]
-    );
-
-    res.json({ success: true });
-
-  } catch (err) {
-    console.error("❌ DISTRIBUTION ERROR:", err);
-    res.status(500).json({ error: "Distribution failed" });
-  }
-});
-
 // ================= REPORT =================
 app.get("/reports/summary", async (req, res) => {
   const data = await pool.query(`
-    SELECT i.id, i.name,
-    COALESCE(SUM(d.quantity_used),0) as total_used
-    FROM inventory i
-    LEFT JOIN distribution d ON i.id=d.inventory_id
-    GROUP BY i.id
+    SELECT 
+      id,
+      name,
+      (boxes_start * items_per_box) - (COALESCE(boxes_end,0) * items_per_box) AS total_used
+    FROM inventory
   `);
 
   res.json(data.rows);
@@ -205,6 +196,7 @@ app.get("/reports/summary", async (req, res) => {
 
 // ================= DASHBOARD =================
 app.get("/reports/dashboard", async (req, res) => {
+
   const p = await pool.query(`
     SELECT COUNT(*) as households,
     COALESCE(SUM(household),0) as individuals
@@ -212,7 +204,8 @@ app.get("/reports/dashboard", async (req, res) => {
   `);
 
   const d = await pool.query(`
-    SELECT COALESCE(SUM(quantity_used),0) as total FROM distribution
+    SELECT COALESCE(SUM((boxes_start * items_per_box) - (COALESCE(boxes_end,0) * items_per_box)),0) as total 
+    FROM inventory
   `);
 
   res.json({
@@ -222,18 +215,22 @@ app.get("/reports/dashboard", async (req, res) => {
   });
 });
 
-// ================= FULL EXPORT =================
+// ================= EXPORT =================
 app.get("/reports/full", async (req, res) => {
   const participants = await pool.query(`SELECT * FROM participants`);
   const volunteers = await pool.query(`SELECT * FROM volunteers`);
-  const inventory = await pool.query(`SELECT * FROM inventory`);
-  const distribution = await pool.query(`SELECT * FROM distribution`);
+  const inventory = await pool.query(`
+    SELECT *,
+    (boxes_start * items_per_box) AS quantity_start,
+    (COALESCE(boxes_end,0) * items_per_box) AS quantity_end,
+    ((boxes_start * items_per_box) - (COALESCE(boxes_end,0) * items_per_box)) AS food_served
+    FROM inventory
+  `);
 
   res.json({
     participants: participants.rows,
     volunteers: volunteers.rows,
-    inventory: inventory.rows,
-    distribution: distribution.rows
+    inventory: inventory.rows
   });
 });
 
