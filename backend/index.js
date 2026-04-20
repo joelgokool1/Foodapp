@@ -1,209 +1,133 @@
 const express = require("express");
 const cors = require("cors");
-const { PrismaClient } = require("@prisma/client");
 
-const prisma = new PrismaClient();
 const app = express();
-
 app.use(cors());
 app.use(express.json());
 
-// ================= ROOT =================
-app.get("/", (req, res) => {
-  res.send("API Running");
-});
+// ================= DATA STORAGE (IN MEMORY) =================
+let participants = [];
+let volunteers = [];
+let inventory = [];
 
-//
+// ================= HELPERS =================
+function now() {
+  return new Date().toISOString();
+}
+
+function isSameDay(d1, d2){
+  return new Date(d1).toDateString() === new Date(d2).toDateString();
+}
+
 // ================= PARTICIPANTS =================
-//
-app.post("/participants", async (req, res) => {
-  try {
-    const { name, household, zip, repeat_visit } = req.body;
+app.post("/participants", (req, res) => {
+  const { name, household, zip } = req.body;
 
-    const data = await prisma.participant.create({
-      data: {
-        name: name || null,
-        household: household ? parseInt(household) : null,
-        zip: zip || null,
-        repeat_visit: repeat_visit || false,
-        visit_date: new Date()
-      },
-    });
+  const record = {
+    id: participants.length + 1,
+    name,
+    household: household || 0,
+    zip,
+    created_at: now()
+  };
 
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  participants.push(record);
+  res.json(record);
 });
 
-app.get("/participants", async (req, res) => {
-  const data = await prisma.participant.findMany({
-    orderBy: { visit_date: "desc" }
-  });
-  res.json(data);
+app.get("/participants", (req, res) => {
+  res.json(participants);
 });
 
-//
 // ================= VOLUNTEERS =================
-//
-app.post("/volunteers", async (req, res) => {
-  try {
-    const { name, role, shift_date } = req.body;
+app.post("/volunteers", (req, res) => {
+  const { name, role, shift_date } = req.body;
 
-    const data = await prisma.volunteer.create({
-      data: {
-        name,
-        role,
-        shift_date: new Date(shift_date)
-      }
-    });
+  const record = {
+    id: volunteers.length + 1,
+    name,
+    role,
+    shift_date,
+    created_at: now()
+  };
 
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  volunteers.push(record);
+  res.json(record);
 });
 
-app.get("/volunteers", async (req, res) => {
-  const data = await prisma.volunteer.findMany({
-    orderBy: { shift_date: "desc" }
+app.get("/volunteers", (req, res) => {
+  res.json(volunteers);
+});
+
+// ================= INVENTORY =================
+app.post("/inventory", (req, res) => {
+  const { name, number_of_boxes, items_per_box, source } = req.body;
+
+  const qty = number_of_boxes * items_per_box;
+
+  const record = {
+    id: inventory.length + 1,
+    name,
+    number_of_boxes,
+    items_per_box,
+    quantity: qty,
+    remaining_quantity: qty,
+    source,
+    created_at: now()
+  };
+
+  inventory.push(record);
+  res.json(record);
+});
+
+app.get("/inventory", (req, res) => {
+  res.json(inventory);
+});
+
+// ================= UPDATE END-OF-DAY USAGE =================
+app.post("/inventory/reset", (req, res) => {
+  const { id, remaining_quantity } = req.body;
+
+  const item = inventory.find(i => i.id == id);
+  if (!item) return res.status(404).send("Not found");
+
+  item.remaining_quantity = parseInt(remaining_quantity);
+
+  res.json(item);
+});
+
+// ================= DASHBOARD =================
+app.get("/reports/dashboard", (req, res) => {
+  const households = participants.length;
+
+  const individuals = participants.reduce((sum, p) => {
+    return sum + (p.household || 0);
+  }, 0);
+
+  const total_distributed = inventory.reduce((sum, i) => {
+    return sum + (i.quantity - i.remaining_quantity);
+  }, 0);
+
+  res.json({
+    households,
+    individuals,
+    total_distributed
   });
-  res.json(data);
 });
 
-//
-// ================= INVENTORY (BOX MODEL) =================
-//
-// ================= INVENTORY (FIXED) =================
-app.post("/inventory", async (req, res) => {
-  try {
-    let { name, number_of_boxes, items_per_box, source } = req.body;
+// ================= REPORT (USAGE TABLE) =================
+app.get("/reports/usage", (req, res) => {
+  const report = inventory.map(i => ({
+    name: i.name,
+    start_boxes: i.number_of_boxes,
+    remaining_boxes: Math.ceil(i.remaining_quantity / i.items_per_box),
+    used_boxes: i.number_of_boxes - Math.ceil(i.remaining_quantity / i.items_per_box)
+  }));
 
-    number_of_boxes = parseInt(number_of_boxes);
-    items_per_box = parseInt(items_per_box);
-
-    if (!name || isNaN(number_of_boxes) || isNaN(items_per_box)) {
-      return res.status(400).json({ error: "Invalid input" });
-    }
-
-    const total_quantity = number_of_boxes * items_per_box;
-
-    const data = await prisma.inventory.create({
-      data: {
-        name: String(name),
-        number_of_boxes: number_of_boxes,
-        items_per_box: items_per_box,
-        quantity: total_quantity,
-        remaining_quantity: total_quantity,
-        source: source || null,
-        created_at: new Date()
-      }
-    });
-
-    res.json(data);
-
-  } catch (err) {
-    console.error("INVENTORY ERROR:", err);   // 🔥 IMPORTANT
-    res.status(500).json({ error: err.message });
-  }
+  res.json(report);
 });
 
-
-app.get("/inventory", async (req, res) => {
-  const data = await prisma.inventory.findMany({
-    orderBy: { created_at: "desc" }
-  });
-  res.json(data);
-});
-
-//
-// ================= UPDATE REMAINING (KEY FEATURE) =================
-//
-app.post("/inventory/reset", async (req, res) => {
-  try {
-    const { id, remaining_quantity } = req.body;
-
-    if (!id || remaining_quantity === undefined) {
-      return res.status(400).json({ error: "Invalid input" });
-    }
-
-    const updated = await prisma.inventory.update({
-      where: { id },
-      data: {
-        remaining_quantity: parseInt(remaining_quantity)
-      }
-    });
-
-    res.json(updated);
-
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-//
-// ================= DISTRIBUTION (LOG USAGE PER DAY) =================
-//
-app.post("/distribute", async (req, res) => {
-  const { inventoryId, quantity_used } = req.body;
-
-  try {
-    // 1. CREATE DISTRIBUTION LOG
-    const record = await prisma.distribution.create({
-      data: {
-        inventoryId,
-        quantity_used,
-        distributed_at: new Date()
-      }
-    });
-
-    // 2. UPDATE INVENTORY
-    await prisma.inventory.update({
-      where: { id: inventoryId },
-      data: {
-        remaining_quantity: {
-          decrement: quantity_used
-        }
-      }
-    });
-
-    res.json(record);
-
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-//
-// ================= REPORTS =================
-//
-app.get("/reports/dashboard", async (req, res) => {
-  try {
-    const participants = await prisma.participant.aggregate({
-      _count: { id: true },
-      _sum: { household: true }
-    });
-
-    const distribution = await prisma.distribution.aggregate({
-      _sum: { quantity_used: true }
-    });
-
-    res.json({
-      households: participants._count.id || 0,
-      individuals: participants._sum.household || 0,
-      total_distributed: distribution._sum.quantity_used || 0
-    });
-
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-//
 // ================= SERVER =================
-//
-const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+app.listen(5000, () => {
+  console.log("Server running on port 5000");
 });
