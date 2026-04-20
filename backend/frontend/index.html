@@ -2,16 +2,69 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Food Dashboard</title>
+<title>Food Distribution Dashboard</title>
+
+<!-- 🔥 ADD THESE TWO LINES -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#007bff">
 
 <style>
+
+<style>
+<style>
 body { font-family: Arial; background:#f4f6f8; padding:10px; }
-.card { background:white; padding:15px; margin-bottom:15px; border-radius:10px; }
-input, button, select { width:100%; padding:10px; margin:5px 0; }
-button { background:#007bff; color:white; border:none; }
-table { width:100%; border-collapse:collapse; }
-th, td { border:1px solid #ddd; padding:6px; }
+
+.card { 
+  background:white; 
+  padding:15px; 
+  margin-bottom:15px; 
+  border-radius:10px; 
+}
+
+input, button, select { 
+  width:100%; 
+  padding:12px; 
+  margin:6px 0; 
+  font-size:16px;
+}
+
+button {
+  background:#007bff;
+  color:white;
+  border:none;
+  border-radius:6px;
+}
+
+button:hover {
+  background:#0056b3;
+}
+
+table { 
+  width:100%; 
+  border-collapse:collapse; 
+  margin-top:10px; 
+  font-size:14px;
+}
+
+th, td { 
+  border:1px solid #ddd; 
+  padding:6px; 
+}
+
 th { background:#333; color:white; }
+
+/* 📱 MOBILE FIX */
+@media (max-width:600px){
+  table, thead, tbody, th, td, tr {
+    display:block;
+  }
+
+  td {
+    border:none;
+    border-bottom:1px solid #ddd;
+  }
+}
+</style>
 </style>
 </head>
 
@@ -19,203 +72,387 @@ th { background:#333; color:white; }
 
 <!-- FILTER -->
 <div class="card">
-<h2>Filter</h2>
-<select id="filter" onchange="loadAll()">
-<option value="all">All</option>
-<option value="today">Today</option>
-<option value="week">Week</option>
-<option value="month">Month</option>
-</select>
+  <h2>Filter</h2>
+  <select id="dateFilter" onchange="reloadAll()">
+    <option value="today">Today</option>
+    <option value="week">This Week</option>
+    <option value="month">This Month</option>
+    <option value="all">All Time</option>
+  </select>
 </div>
 
 <!-- DASHBOARD -->
 <div class="card">
-<h2>Dashboard</h2>
-<p>Households: <span id="h">0</span></p>
-<p>Individuals: <span id="i">0</span></p>
-<p>Distributed: <span id="d">0</span></p>
+  <h2>Dashboard</h2>
+  <canvas id="chart"></canvas>
 </div>
+
+<!-- EXPORT -->
+<button onclick="exportAll()">Export Full Report (Excel)</button>
 
 <!-- INTAKE -->
 <div class="card">
 <h2>Intake</h2>
+
 <form id="form">
 <input id="name" placeholder="Name">
-<input id="household" type="number" placeholder="Household">
-<input id="zip" placeholder="Zip">
-<button>Add</button>
+<input id="household" type="number" placeholder="Household Size" required>
+<input id="zip" value="07030">
+<label><input type="checkbox" id="repeat"> Repeat Visit</label>
+<button>Submit</button>
 </form>
+
+<p>Households: <span id="households">0</span></p>
+<p>Individuals: <span id="individuals">0</span></p>
+
+<table>
+<thead>
+<tr><th>ID</th><th>Name</th><th>Household</th><th>Action</th></tr>
+</thead>
+<tbody id="tbody"></tbody>
+</table>
 </div>
 
 <!-- VOLUNTEERS -->
 <div class="card">
 <h2>Volunteers</h2>
+
 <form id="volForm">
-<input id="vname" placeholder="Name">
-<input id="vrole" placeholder="Role">
-<input id="vdate" type="date">
+<input id="volName" placeholder="Name" required>
+<input id="volRole" placeholder="Role">
+<input id="volDate" type="date" required>
 <button>Add Volunteer</button>
 </form>
+
+<table>
+<thead>
+<tr><th>Name</th><th>Role</th><th>Date</th><th>Action</th></tr>
+</thead>
+<tbody id="volTable"></tbody>
+</table>
 </div>
 
 <!-- INVENTORY -->
 <div class="card">
 <h2>Inventory</h2>
-<form id="invForm">
-<input id="iname" placeholder="Item">
-<input id="boxes" type="number" placeholder="Boxes">
-<input id="perbox" type="number" placeholder="Per Box">
-<button>Add</button>
+
+<form id="inventoryForm">
+<input id="item_name" placeholder="Item Name" required>
+<input id="quantity_received" type="number" placeholder="Quantity" required>
+<input id="source" placeholder="Source">
+<button>Add Inventory</button>
 </form>
 
 <table>
 <thead>
 <tr>
+<th>ID</th>
 <th>Item</th>
-<th>Start</th>
+<th>Qty Received</th>
 <th>Remaining</th>
-<th>Used</th>
-<th>Update</th>
+<th>Action</th>
 </tr>
 </thead>
-<tbody id="invTable"></tbody>
+<tbody id="inventoryTable"></tbody>
 </table>
 </div>
 
 <!-- REPORT -->
 <div class="card">
-<h2>Report</h2>
-<button onclick="exportCSV()">Export CSV</button>
+<h2>Distribution Report</h2>
+<button onclick="loadReport()">Refresh Report</button>
 
 <table>
 <thead>
-<tr><th>Item</th><th>Used</th></tr>
+<tr><th>ID</th><th>Item</th><th>Total Used</th></tr>
 </thead>
 <tbody id="reportTable"></tbody>
 </table>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <script>
-const API = "https://foodapp-backend.onrender.com";
+const API = "https://foodapp-zhu2.onrender.com";
 
-// ================= INTAKE =================
-form.onsubmit = async e=>{
-e.preventDefault();
+// ================= FILTER =================
+function isMatch(dateStr){
+  const filter = document.getElementById("dateFilter").value;
+  const now = new Date();
+  const d = new Date(dateStr);
 
-await fetch(API+"/participants",{
-method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify({
-name:name.value,
-household:parseInt(household.value)||0,
-zip:zip.value
-})
-});
+  if(filter === "today") return d.toDateString() === now.toDateString();
 
-form.reset();
-loadAll();
-};
+  if(filter === "week"){
+    const weekAgo = new Date();
+    weekAgo.setDate(now.getDate() - 7);
+    return d >= weekAgo;
+  }
 
-// ================= VOLUNTEERS =================
-volForm.onsubmit = async e=>{
-e.preventDefault();
+  if(filter === "month"){
+    return d.getMonth() === now.getMonth() &&
+           d.getFullYear() === now.getFullYear();
+  }
 
-await fetch(API+"/volunteers",{
-method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify({
-name:vname.value,
-role:vrole.value,
-shift_date:vdate.value
-})
-});
-
-volForm.reset();
-};
-
-// ================= INVENTORY =================
-invForm.onsubmit = async e=>{
-e.preventDefault();
-
-await fetch(API+"/inventory",{
-method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify({
-name:iname.value,
-number_of_boxes:parseInt(boxes.value),
-items_per_box:parseInt(perbox.value)
-})
-});
-
-invForm.reset();
-loadAll();
-};
-
-// ================= LOAD ALL =================
-async function loadAll(){
-
-const filter = document.getElementById("filter").value;
-
-// INVENTORY
-const inv = await (await fetch(API+"/inventory")).json();
-
-invTable.innerHTML="";
-reportTable.innerHTML="";
-
-inv.forEach(i=>{
-const remain = Math.ceil(i.remaining_quantity/i.items_per_box);
-const used = i.number_of_boxes - remain;
-
-invTable.innerHTML += `
-<tr>
-<td>${i.name}</td>
-<td>${i.number_of_boxes}</td>
-<td>${remain}</td>
-<td>${used}</td>
-<td>
-<input id="r${i.id}" type="number">
-<button onclick="update(${i.id},${i.items_per_box})">Save</button>
-</td>
-</tr>`;
-
-reportTable.innerHTML += `
-<tr>
-<td>${i.name}</td>
-<td>${used}</td>
-</tr>`;
-});
-
-// DASHBOARD
-const dash = await (await fetch(API+"/reports/dashboard?filter="+filter)).json();
-
-h.innerText = dash.households;
-i.innerText = dash.individuals;
-d.innerText = dash.total_distributed;
+  return true;
 }
 
-// ================= UPDATE INVENTORY =================
-async function update(id, per){
-const val = document.getElementById("r"+id).value;
+// ================= PARTICIPANTS =================
+async function loadData(){
+  const res = await fetch(API + "/participants");
+  const data = await res.json();
 
-await fetch(API+"/inventory/reset",{
-method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify({
-id,
-remaining_quantity: val*per
-})
+  const filtered = data.filter(p => p.visit_date && isMatch(p.visit_date));
+
+  const tbody = document.getElementById("tbody");
+  tbody.innerHTML = "";
+
+  let h=0,i=0;
+
+  filtered.forEach(p=>{
+    h++;
+    i+=p.household;
+
+    tbody.innerHTML += `
+    <tr>
+      <td>${p.id}</td>
+      <td>${p.name||""}</td>
+      <td>${p.household}</td>
+      <td><button onclick="deleteParticipant(${p.id})">Delete</button></td>
+    </tr>`;
+  });
+
+  households.innerText = h;
+  individuals.innerText = i;
+}
+
+form.addEventListener("submit", async e=>{
+  e.preventDefault();
+
+  await fetch(API + "/participants",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({
+      name: name.value,
+      household: parseInt(household.value),
+      zip: zip.value,
+      repeat_visit: repeat.checked
+    })
+  });
+
+  form.reset();
+  loadData();
 });
 
-loadAll();
+// ================= VOLUNTEERS =================
+async function loadVolunteers(){
+  const res = await fetch(API + "/volunteers");
+  const data = await res.json();
+
+  const filtered = data.filter(v => v.shift_date && isMatch(v.shift_date));
+
+  const table = document.getElementById("volTable");
+  table.innerHTML="";
+
+  filtered.forEach(v=>{
+    table.innerHTML += `<tr>
+      <td>${v.name}</td>
+      <td>${v.role||""}</td>
+      <td>${v.shift_date}</td>
+      <td><button onclick="deleteVolunteer(${v.id})">Delete</button></td>
+    </tr>`;
+  });
+}
+
+
+volForm.addEventListener("submit", async e=>{
+  e.preventDefault();
+
+  // ✅ VALIDATION
+  if (!volDate.value) {
+    alert("Please select a date");
+    return;
+  }
+
+  const payload = {
+    name: volName.value,
+    role: volRole.value,
+    shift_date: volDate.value
+  };
+
+  console.log("Sending volunteer:", payload);
+
+  const res = await fetch(API + "/volunteers",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify(payload)
+  });
+
+  const data = await res.json();
+  console.log("Response:", data);
+
+  volForm.reset();
+  loadVolunteers();
+});
+
+// ================= INVENTORY =================
+async function loadInventory(){
+  const res = await fetch(API + "/inventory");
+  const data = await res.json();
+
+  const table = document.getElementById("inventoryTable");
+  table.innerHTML = "";
+
+  data.forEach(item=>{
+    table.innerHTML += `
+    <tr>
+      <td>${item.id}</td>
+      <td>${item.name}</td>
+      <td>${item.quantity_received}</td>
+      <td>${item.remaining_quantity}</td>
+      <td>
+        <input id="use-${item.id}" type="number">
+        <button onclick="useItem(${item.id})">Use</button>
+        <button onclick="deleteInventory(${item.id})">Delete</button>
+      </td>
+    </tr>`;
+  });
+}
+
+inventoryForm.addEventListener("submit", async e=>{
+  e.preventDefault();
+
+  await fetch(API + "/inventory",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({
+      name: item_name.value,
+      quantity_received: parseInt(quantity_received.value),
+      source: source.value
+    })
+  });
+
+  inventoryForm.reset();
+  loadInventory();
+});
+
+async function useItem(id){
+  const qty = document.getElementById(`use-${id}`).value;
+
+  await fetch(API + "/inventory/distribute",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({
+      inventory_id:id,
+      quantity_used:parseInt(qty)
+    })
+  });
+
+  loadInventory();
+  loadReport();
+loadReport();
+}
+
+// ================= REPORT =================
+async function loadReport(){
+  const res = await fetch(API + "/reports/summary");
+  const data = await res.json();
+
+  const table = document.getElementById("reportTable");
+  table.innerHTML="";
+data.forEach(r=>{
+  table.innerHTML += `
+    <tr>
+      <td>${r.id}</td>
+      <td>${r.name}</td>
+      <td>${r.total_used}</td>
+    </tr>`;
+});
+  
+}
+
+// ================= DASHBOARD =================
+async function loadChart(){
+  const res = await fetch(API + "/reports/dashboard");
+  const data = await res.json();
+
+  new Chart(document.getElementById("chart"), {
+    type: "bar",
+    data: {
+      labels: ["Households","Individuals","Distributed"],
+      datasets: [{
+        label: "Totals",
+        data: [data.households, data.individuals, data.total_distributed]
+      }]
+    }
+  });
 }
 
 // ================= EXPORT =================
-function exportCSV(){
-window.open(API+"/reports/export");
+async function exportAll(){
+  const res = await fetch(API + "/reports/full");
+  const data = await res.json();
+
+  let csv = "TYPE,NAME,VALUE1,VALUE2,DATE\n";
+
+  data.participants.forEach(p=>{
+    csv += `Participant,${p.name},${p.household},,${p.visit_date}\n`;
+  });
+
+  data.volunteers.forEach(v=>{
+    csv += `Volunteer,${v.name},${v.role},,${v.shift_date}\n`;
+  });
+
+  data.inventory.forEach(i=>{
+    csv += `Inventory,${i.name},${i.quantity_received},${i.remaining_quantity},\n`;
+  });
+
+  data.distribution.forEach(d=>{
+    csv += `Distribution,,${d.quantity_used},${d.inventory_id},${d.distributed_at}\n`;
+  });
+
+  const blob = new Blob([csv], {type:"text/csv"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "report.csv";
+  a.click();
 }
 
-// INIT
-loadAll();
+// ================= DELETE =================
+async function deleteParticipant(id){
+  await fetch(API + "/participants/"+id,{method:"DELETE"});
+  loadData();
+}
+async function deleteVolunteer(id){
+  await fetch(API + "/volunteers/"+id,{method:"DELETE"});
+  loadVolunteers();
+}
+async function deleteInventory(id){
+  await fetch(API + "/inventory/"+id,{method:"DELETE"});
+  loadInventory();
+}
+
+// ================= INIT =================
+function reloadAll(){
+  loadData();
+  loadVolunteers();
+  loadReport();
+}
+
+window.onload = ()=>{
+  loadData();
+  loadVolunteers();
+  loadInventory();
+  loadReport();
+  loadChart();
+};
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js")
+    .then(() => console.log("SW registered"))
+    .catch(err => console.log("SW error", err));
+}
+
 </script>
 
 </body>
