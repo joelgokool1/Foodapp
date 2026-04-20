@@ -308,32 +308,42 @@ async function loadInventory(){
   const table = document.getElementById("inventoryTable");
   table.innerHTML = "";
 
- data.forEach(item=>{
+  data.forEach(item=>{
+    const qtyStart = item.boxes_start * item.items_per_box;
+    const qtyEnd = (item.boxes_end || 0) * item.items_per_box;
+    const served = qtyStart - qtyEnd;
+
+    table.innerHTML += `
+    <tr>
+      <td>${item.id}</td>
+      <td>${item.name}</td>
+      <td>${item.boxes_start}</td>
+      <td>${item.items_per_box}</td>
+      <td>${qtyStart}</td>
+
+      <td>
+        <input 
+          id="end-${item.id}" 
+          type="number" 
+          step="0.1"
+          value="${item.boxes_end || 0}"
+          oninput="calculateServed(${item.id}, ${item.boxes_start}, ${item.items_per_box})"
+        >
+      </td>
+
+      <td id="endQty-${item.id}">${qtyEnd}</td>
+      <td id="served-${item.id}">${served}</td>
+
+      <td>
+        <button onclick="deleteInventory(${item.id})">Delete</button>
+      </td>
+    </tr>`;
+  });
+}
   const qtyStart = item.boxes_start * item.items_per_box;
   const boxesEnd = item.boxes_end || 0;
   const qtyEnd = boxesEnd * item.items_per_box;
-  const served = qtyStart - qtyEnd;
-
-  table.innerHTML += `
-  <tr>
-    <td>${item.id}</td>
-    <td>${item.name}</td>
-    <td>${item.boxes_start}</td>
-    <td>${item.items_per_box}</td>
-    <td>${qtyStart}</td>
-  <td>
-  <input 
-    id="end-${item.id}" 
-    type="number" 
-    value="${boxesEnd}"
-    oninput="calculateServed(${item.id}, ${item.boxes_start}, ${item.items_per_box})"
-  >
-  <button onclick="updateEnd(${item.id})">Save</button>
-</td>
-
-<td id="served-${item.id}">${served}</td>
-    </tr>`;
-  });
+ \
 }
 
 inventoryForm.addEventListener("submit", async e=>{
@@ -357,6 +367,7 @@ inventoryForm.addEventListener("submit", async e=>{
 
   inventoryForm.reset();
   loadInventory();
+
 });
 
 
@@ -448,14 +459,6 @@ async function deleteInventory(id){
 async function updateEnd(id){
   const val = Number(document.getElementById(`end-${id}`).value) || 0;
 
-  const row = document.getElementById(`end-${id}`).closest("tr");
-  const boxesStart = Number(row.children[2].innerText);
-
-  if (val > boxesStart) {
-    alert("Boxes End cannot be greater than Boxes Start");
-    return;
-  }
-
   await fetch(API + "/inventory/update-end",{
     method:"POST",
     headers:{"Content-Type":"application/json"},
@@ -468,13 +471,15 @@ async function updateEnd(id){
   loadInventory();
 }
 
+// 🔽 ADD IT RIGHT HERE
 function calculateServed(id, boxesStart, perBox){
-  const endVal = parseInt(document.getElementById(`end-${id}`).value) || 0;
+  const endVal = parseFloat(document.getElementById(`end-${id}`).value) || 0;
 
   const qtyStart = boxesStart * perBox;
   const qtyEnd = endVal * perBox;
   const served = qtyStart - qtyEnd;
 
+  document.getElementById(`endQty-${id}`).innerText = qtyEnd;
   document.getElementById(`served-${id}`).innerText = served;
 }
 // ================= INIT =================

@@ -23,9 +23,9 @@ await pool.query(`
   CREATE TABLE inventory (
     id SERIAL PRIMARY KEY,
     name TEXT,
-    boxes_start INT DEFAULT 0,
+    boxes_start FLOAT DEFAULT 0,
     items_per_box INT DEFAULT 0,
-    boxes_end INT DEFAULT 0,
+    boxes_end FLOAT DEFAULT 0,
     source TEXT,
     created_at TIMESTAMP DEFAULT NOW()
   );
@@ -174,10 +174,19 @@ app.post("/inventory", async (req, res) => {
 // GET INVENTORY
 app.get("/inventory", async (req, res) => {
   const data = await pool.query(`
-    SELECT *,
-    (boxes_start * items_per_box) AS quantity_start,
-    (COALESCE(boxes_end,0) * items_per_box) AS quantity_end,
-    ((boxes_start * items_per_box) - (COALESCE(boxes_end,0) * items_per_box)) AS food_served
+    SELECT 
+      id,
+      name,
+      boxes_start,
+      items_per_box,
+      boxes_end,
+      created_at,
+
+      -- 🧮 FORMULAS
+      (boxes_start * items_per_box) AS quantity_start,
+      (boxes_end * items_per_box) AS quantity_end,
+      ((boxes_start * items_per_box) - (boxes_end * items_per_box)) AS food_served
+
     FROM inventory
     ORDER BY id DESC
   `);
