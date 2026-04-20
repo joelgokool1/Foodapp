@@ -217,21 +217,31 @@ app.get("/reports/dashboard", async (req, res) => {
 
 // ================= EXPORT =================
 app.get("/reports/full", async (req, res) => {
-  const participants = await pool.query(`SELECT * FROM participants`);
-  const volunteers = await pool.query(`SELECT * FROM volunteers`);
-  const inventory = await pool.query(`
-    SELECT *,
-    (boxes_start * items_per_box) AS quantity_start,
-    (COALESCE(boxes_end,0) * items_per_box) AS quantity_end,
-    ((boxes_start * items_per_box) - (COALESCE(boxes_end,0) * items_per_box)) AS food_served
-    FROM inventory
-  `);
+  try {
+    const participants = await pool.query(`SELECT * FROM participants`);
+    const volunteers = await pool.query(`SELECT * FROM volunteers`);
+    const inventory = await pool.query(`
+      SELECT *,
+      (boxes_start * items_per_box) AS quantity_start,
+      (COALESCE(boxes_end,0) * items_per_box) AS quantity_end,
+      ((boxes_start * items_per_box) - (COALESCE(boxes_end,0) * items_per_box)) AS food_served
+      FROM inventory
+    `);
 
-  res.json({
-    participants: participants.rows,
-    volunteers: volunteers.rows,
-    inventory: inventory.rows
-  });
+    // ✅ ADD THIS (prevents crash)
+    const distribution = []; 
+
+    res.json({
+      participants: participants.rows,
+      volunteers: volunteers.rows,
+      inventory: inventory.rows,
+      distribution: distribution   // 🔥 REQUIRED FIX
+    });
+
+  } catch (err) {
+    console.error("EXPORT ERROR:", err);
+    res.status(500).json({ error: "Export failed" });
+  }
 });
 
 // ================= SERVER =================
