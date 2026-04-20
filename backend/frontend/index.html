@@ -1,17 +1,32 @@
 <!DOCTYPE html>
 <html>
 <head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Food Dashboard</title>
+
 <style>
-body { font-family: Arial; padding:10px; background:#f4f6f8;}
-.card { background:white; padding:10px; margin:10px 0; border-radius:8px;}
-input,button,select { width:100%; margin:5px 0; padding:8px;}
-table { width:100%; border-collapse:collapse;}
-td,th { border:1px solid #ddd; padding:5px;}
+body { font-family: Arial; background:#f4f6f8; padding:10px; }
+.card { background:white; padding:15px; margin-bottom:15px; border-radius:10px; }
+input, button, select { width:100%; padding:10px; margin:5px 0; }
+button { background:#007bff; color:white; border:none; }
+table { width:100%; border-collapse:collapse; }
+th, td { border:1px solid #ddd; padding:6px; }
+th { background:#333; color:white; }
 </style>
 </head>
 
 <body>
+
+<!-- FILTER -->
+<div class="card">
+<h2>Filter</h2>
+<select id="filter" onchange="loadAll()">
+<option value="all">All</option>
+<option value="today">Today</option>
+<option value="week">Week</option>
+<option value="month">Month</option>
+</select>
+</div>
 
 <!-- DASHBOARD -->
 <div class="card">
@@ -19,93 +34,86 @@ td,th { border:1px solid #ddd; padding:5px;}
 <p>Households: <span id="h">0</span></p>
 <p>Individuals: <span id="i">0</span></p>
 <p>Distributed: <span id="d">0</span></p>
-<button onclick="load()">Refresh</button>
 </div>
 
 <!-- INTAKE -->
 <div class="card">
 <h2>Intake</h2>
 <form id="form">
-<input id="name" placeholder="Name" required>
-<input id="household" type="number" placeholder="Household" required>
-<input id="zip" placeholder="Zip" required>
+<input id="name" placeholder="Name">
+<input id="household" type="number" placeholder="Household">
+<input id="zip" placeholder="Zip">
 <button>Add</button>
 </form>
-<p id="status"></p>
 </div>
 
 <!-- VOLUNTEERS -->
 <div class="card">
 <h2>Volunteers</h2>
 <form id="volForm">
-<input id="vname" placeholder="Name" required>
+<input id="vname" placeholder="Name">
 <input id="vrole" placeholder="Role">
-<input id="vdate" type="date" required>
+<input id="vdate" type="date">
 <button>Add Volunteer</button>
 </form>
 </div>
 
 <!-- INVENTORY -->
 <div class="card">
-<h2>Inventory (End of Day Tracking)</h2>
-
+<h2>Inventory</h2>
 <form id="invForm">
-<input id="iname" placeholder="Item" required>
-<input id="boxes" type="number" placeholder="Boxes" required>
-<input id="perbox" type="number" placeholder="Items per Box" required>
-<button>Add Inventory</button>
+<input id="iname" placeholder="Item">
+<input id="boxes" type="number" placeholder="Boxes">
+<input id="perbox" type="number" placeholder="Per Box">
+<button>Add</button>
 </form>
 
 <table>
 <thead>
 <tr>
 <th>Item</th>
-<th>Start Boxes</th>
-<th>Remaining Boxes</th>
-<th>Used Boxes</th>
-<th>Update End of Day</th>
+<th>Start</th>
+<th>Remaining</th>
+<th>Used</th>
+<th>Update</th>
 </tr>
 </thead>
 <tbody id="invTable"></tbody>
 </table>
-
 </div>
 
 <!-- REPORT -->
 <div class="card">
-<h2>Usage Report</h2>
+<h2>Report</h2>
+<button onclick="exportCSV()">Export CSV</button>
+
 <table>
 <thead>
-<tr><th>Item</th><th>Used Boxes</th></tr>
+<tr><th>Item</th><th>Used</th></tr>
 </thead>
 <tbody id="reportTable"></tbody>
 </table>
 </div>
 
 <script>
-const API = "http://localhost:5000";
+const API = "https://foodapp-backend.onrender.com";
 
 // ================= INTAKE =================
 form.onsubmit = async e=>{
 e.preventDefault();
 
-const data = {
-name: name.value,
-household: parseInt(household.value),
-zip: zip.value
-};
-
-const res = await fetch(API+"/participants",{
+await fetch(API+"/participants",{
 method:"POST",
 headers:{"Content-Type":"application/json"},
-body:JSON.stringify(data)
+body:JSON.stringify({
+name:name.value,
+household:parseInt(household.value)||0,
+zip:zip.value
+})
 });
 
-const result = await res.json();
-status.innerText = "Added: "+result.name;
-
 form.reset();
-load();
+loadAll();
 };
 
 // ================= VOLUNTEERS =================
@@ -140,74 +148,74 @@ items_per_box:parseInt(perbox.value)
 });
 
 invForm.reset();
-load();
+loadAll();
 };
 
-// ================= LOAD DATA =================
-async function load(){
+// ================= LOAD ALL =================
+async function loadAll(){
+
+const filter = document.getElementById("filter").value;
 
 // INVENTORY
 const inv = await (await fetch(API+"/inventory")).json();
+
 invTable.innerHTML="";
 reportTable.innerHTML="";
 
 inv.forEach(i=>{
-const remainingBoxes = Math.ceil(i.remaining_quantity / i.items_per_box);
-const usedBoxes = i.number_of_boxes - remainingBoxes;
+const remain = Math.ceil(i.remaining_quantity/i.items_per_box);
+const used = i.number_of_boxes - remain;
 
 invTable.innerHTML += `
 <tr>
 <td>${i.name}</td>
 <td>${i.number_of_boxes}</td>
-<td>${remainingBoxes}</td>
-<td>${usedBoxes}</td>
+<td>${remain}</td>
+<td>${used}</td>
 <td>
-<input id="r${i.id}" type="number" placeholder="Remaining">
+<input id="r${i.id}" type="number">
 <button onclick="update(${i.id},${i.items_per_box})">Save</button>
 </td>
-</tr>
-`;
+</tr>`;
 
 reportTable.innerHTML += `
 <tr>
 <td>${i.name}</td>
-<td>${usedBoxes}</td>
-</tr>
-`;
+<td>${used}</td>
+</tr>`;
 });
 
 // DASHBOARD
-const dash = await (await fetch(API+"/reports/dashboard")).json();
+const dash = await (await fetch(API+"/reports/dashboard?filter="+filter)).json();
+
 h.innerText = dash.households;
 i.innerText = dash.individuals;
 d.innerText = dash.total_distributed;
 }
 
-// ================= UPDATE END OF DAY =================
-async function update(id, perBox){
+// ================= UPDATE INVENTORY =================
+async function update(id, per){
 const val = document.getElementById("r"+id).value;
-
-if(!val){
-alert("Enter remaining boxes");
-return;
-}
-
-const qty = parseInt(val) * perBox;
 
 await fetch(API+"/inventory/reset",{
 method:"POST",
 headers:{"Content-Type":"application/json"},
 body:JSON.stringify({
 id,
-remaining_quantity:qty
+remaining_quantity: val*per
 })
 });
 
-load();
+loadAll();
+}
+
+// ================= EXPORT =================
+function exportCSV(){
+window.open(API+"/reports/export");
 }
 
 // INIT
-load();
+loadAll();
 </script>
 
 </body>

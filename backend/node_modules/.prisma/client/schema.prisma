@@ -1,0 +1,42 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Participant {
+  id           Int      @id @default(autoincrement())
+  name         String?
+  household    Int?
+  zip          String?
+  repeat_visit Boolean  @default(false)
+  visit_date   DateTime @default(now())
+}
+
+model Volunteer {
+  id         Int      @id @default(autoincrement())
+  name       String
+  role       String?
+  shift_date DateTime
+}
+
+model Inventory {
+  id                 Int      @id @default(autoincrement())
+  name               String
+  number_of_boxes    Int
+  items_per_box      Int
+  quantity           Int
+  remaining_quantity Int
+  source             String?
+  created_at         DateTime @default(now())
+}
+
+model Distribution {
+  id             Int      @id @default(autoincrement())
+  inventoryId    Int
+  quantity_used  Int
+  distributed_at DateTime @default(now())
+}
