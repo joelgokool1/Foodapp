@@ -16,16 +16,20 @@ const pool = new Pool({
 async function init() {
 
   // PARTICIPANTS
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS participants (
-      id SERIAL PRIMARY KEY,
-      name TEXT,
-      household INT,
-      zip TEXT,
-      repeat_visit BOOLEAN,
-      visit_date TIMESTAMP DEFAULT NOW()
-    );
-  `);
+ // 🔥 RESET INVENTORY TABLE (FIXES EVERYTHING)
+await pool.query(`DROP TABLE IF EXISTS inventory`);
+
+await pool.query(`
+  CREATE TABLE inventory (
+    id SERIAL PRIMARY KEY,
+    name TEXT,
+    boxes_start INT DEFAULT 0,
+    items_per_box INT DEFAULT 0,
+    boxes_end INT DEFAULT 0,
+    source TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
+  );
+`);
 await pool.query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS boxes_start INT`);
 await pool.query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS items_per_box INT`);
 await pool.query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS boxes_end INT DEFAULT 0`);
