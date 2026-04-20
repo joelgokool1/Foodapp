@@ -52,7 +52,26 @@ await pool.query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS created_at TIME
       created_at TIMESTAMP DEFAULT NOW()
     );
   `);
+// 🔥 FORCE FIX INVENTORY TABLE
+await pool.query(`
+  ALTER TABLE inventory 
+  ADD COLUMN IF NOT EXISTS boxes_start INT DEFAULT 0
+`);
 
+await pool.query(`
+  ALTER TABLE inventory 
+  ADD COLUMN IF NOT EXISTS items_per_box INT DEFAULT 0
+`);
+
+await pool.query(`
+  ALTER TABLE inventory 
+  ADD COLUMN IF NOT EXISTS boxes_end INT DEFAULT 0
+`);
+
+await pool.query(`
+  ALTER TABLE inventory 
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()
+`);
   console.log("✅ Tables ready");
 }
 init();
@@ -125,6 +144,8 @@ app.delete("/volunteers/:id", async (req, res) => {
 // ADD INVENTORY
 app.post("/inventory", async (req, res) => {
   try {
+    console.log("🔥 INVENTORY BODY:", req.body);
+
     const { name, boxes_start, items_per_box, source } = req.body;
 
     await pool.query(
@@ -132,8 +153,8 @@ app.post("/inventory", async (req, res) => {
        VALUES ($1,$2,$3,$4)`,
       [
         name || "",
-        parseInt(boxes_start) || 0,
-        parseInt(items_per_box) || 0,
+        Number(boxes_start),
+        Number(items_per_box),
         source || ""
       ]
     );
@@ -141,8 +162,8 @@ app.post("/inventory", async (req, res) => {
     res.json({ success: true });
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Inventory save failed" });
+    console.error("❌ INVENTORY ERROR:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
