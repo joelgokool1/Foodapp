@@ -71,7 +71,21 @@ app.get("/participants", async (req, res) => {
   const data = await pool.query(`SELECT * FROM participants ORDER BY id DESC`);
   res.json(data.rows);
 });
+// DELETE PARTICIPANT
+app.delete("/participants/:id", async (req, res) => {
+  try {
+    await pool.query(
+      `DELETE FROM participants WHERE id=$1`,
+      [req.params.id]
+    );
 
+    res.json({ success: true });
+
+  } catch (err) {
+    console.error("❌ DELETE PARTICIPANT ERROR:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
 // ================= VOLUNTEERS =================
 app.post("/volunteers", async (req, res) => {
   const { name, role, shift_date } = req.body;
@@ -89,7 +103,14 @@ app.get("/volunteers", async (req, res) => {
   const data = await pool.query(`SELECT * FROM volunteers ORDER BY id DESC`);
   res.json(data.rows);
 });
+app.delete("/volunteers/:id", async (req, res) => {
+  await pool.query(
+    `DELETE FROM volunteers WHERE id=$1`,
+    [req.params.id]
+  );
 
+  res.json({ success: true });
+});
 // ================= INVENTORY =================
 
 // ADD INVENTORY
