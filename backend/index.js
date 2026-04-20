@@ -170,13 +170,14 @@ app.get("/reports/dashboard", async (req, res) => {
 
 // ================= REPORT =================
 app.get("/reports/usage", async (req, res) => {
-  const result = await pool.query(`
-    SELECT name,
-    quantity as start,
-    remaining_quantity as remaining,
-    (quantity - remaining_quantity) as used
-    FROM inventory
-  `);
+const result = await pool.query(`
+  SELECT name,
+  quantity as start,
+  remaining_quantity as remaining,
+  (quantity - remaining_quantity) as used,
+  created_at as date
+  FROM inventory
+`);
 
 
   res.json(result.rows);
