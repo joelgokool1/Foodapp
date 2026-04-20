@@ -340,32 +340,7 @@ async function loadInventory(){
       </td>
     </tr>`;
   });
-
-inventoryForm.addEventListener("submit", async e=>{
-  e.preventDefault();
-
-  if (!boxes_start.value || !items_per_box.value) {
-    alert("Enter number of boxes and items per box");
-    return;
-  }
-
-  await fetch(API + "/inventory",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({
-      name: item_name.value.trim(),
-      boxes_start: Number(boxes_start.value),
-      items_per_box: Number(items_per_box.value),
-      source: source.value || ""
-    })
-  });
-
-  inventoryForm.reset();
-  loadInventory();
-
-});
-
-
+}
 
 // ================= REPORT =================
 async function loadReport(){
@@ -477,6 +452,30 @@ function calculateServed(id, boxesStart, perBox){
   document.getElementById(`endQty-${id}`).innerText = qtyEnd;
   document.getElementById(`served-${id}`).innerText = served;
 }
+
+// ================= INVENTORY SUBMIT (MOVE HERE) =================
+inventoryForm.addEventListener("submit", async e=>{
+  e.preventDefault();
+
+  if (!boxes_start.value || !items_per_box.value) {
+    alert("Enter number of boxes and items per box");
+    return;
+  }
+
+  await fetch(API + "/inventory",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({
+      name: item_name.value.trim(),
+      boxes_start: Number(boxes_start.value),
+      items_per_box: Number(items_per_box.value),
+      source: source.value || ""
+    })
+  });
+
+  inventoryForm.reset();
+  loadInventory();
+});
 // ================= INIT =================
 function reloadAll(){
   loadData();
