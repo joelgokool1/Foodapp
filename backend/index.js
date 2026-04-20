@@ -96,18 +96,25 @@ app.post("/volunteers", async (req, res) => {
 
 // ================= INVENTORY =================
 app.post("/inventory", async (req, res) => {
-  const { name, number_of_boxes, items_per_box } = req.body;
+  try {
+    const { name, number_of_boxes, items_per_box } = req.body;
 
-  const total = number_of_boxes * items_per_box;
+    const boxes = parseInt(number_of_boxes) || 0;
+    const perBox = parseInt(items_per_box) || 0;
+    const total = boxes * perBox;
 
-  await pool.query(
-    `INSERT INTO inventory
-     (name, number_of_boxes, items_per_box, quantity, remaining_quantity)
-     VALUES ($1,$2,$3,$4,$4)`,
-    [name, number_of_boxes, items_per_box, total]
-  );
+    await pool.query(
+      `INSERT INTO inventory
+       (name, number_of_boxes, items_per_box, quantity, remaining_quantity)
+       VALUES ($1,$2,$3,$4,$4)`,
+      [name || "", boxes, perBox, total]
+    );
 
-  res.json({ success: true });
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Inventory save failed" });
+  }
 });
 
 app.get("/inventory", async (req, res) => {
