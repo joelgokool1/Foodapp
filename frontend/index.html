@@ -335,6 +335,7 @@ async function loadInventory(){
       <td id="served-${item.id}">${served}</td>
 
       <td>
+        <button onclick="updateEnd(${item.id})">Save</button>
         <button onclick="deleteInventory(${item.id})">Delete</button>
       </td>
     </tr>`;
