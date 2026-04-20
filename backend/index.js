@@ -6,84 +6,80 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ✅ YOUR RENDER DATABASE (FIXED WITH SSL + PORT)
+// ✅ DATABASE CONNECTION (Render)
 const pool = new Pool({
   connectionString: "postgresql://foodappdb_olki_user:Y6b4XjgkuJ1ph8DIrjezAJ0lMG2xVnVV@dpg-d7colffaqgkc73fdted0-a.virginia-postgres.render.com:5432/foodapp_db_vgik",
   ssl: { rejectUnauthorized: false }
 });
 
 // ================= INIT TABLES =================
-async function init() {
+async function init(){
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS participants (
-      id SERIAL PRIMARY KEY,
-      name TEXT,
-      household INT,
-      zip TEXT,
-      created_at TIMESTAMP DEFAULT NOW()
-    );
 
-    CREATE TABLE IF NOT EXISTS volunteers (
-      id SERIAL PRIMARY KEY,
-      name TEXT,
-      role TEXT,
-      shift_date DATE,
-      created_at TIMESTAMP DEFAULT NOW()
-    );
+  CREATE TABLE IF NOT EXISTS participants (
+    id SERIAL PRIMARY KEY,
+    name TEXT,
+    household INT,
+    zip TEXT,
+    repeat_visit BOOLEAN,
+    visit_date TIMESTAMP DEFAULT NOW()
+  );
 
-    CREATE TABLE IF NOT EXISTS inventory (
-      id SERIAL PRIMARY KEY,
-      name TEXT,
-      number_of_boxes INT,
-      items_per_box INT,
-      quantity INT,
-      remaining_quantity INT,
-      created_at TIMESTAMP DEFAULT NOW()
-    );
+  CREATE TABLE IF NOT EXISTS volunteers (
+    id SERIAL PRIMARY KEY,
+    name TEXT,
+    role TEXT,
+    shift_date DATE
+  );
 
-    CREATE TABLE IF NOT EXISTS usage_logs (
-      id SERIAL PRIMARY KEY,
-      inventory_id INT,
-      name TEXT,
-      used INT,
-      log_date TIMESTAMP DEFAULT NOW()
-    );
+  CREATE TABLE IF NOT EXISTS inventory (
+    id SERIAL PRIMARY KEY,
+    name TEXT,
+    quantity_received INT,
+    remaining_quantity INT,
+    source TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
+  );
+
+  CREATE TABLE IF NOT EXISTS distribution (
+    id SERIAL PRIMARY KEY,
+    inventory_id INT,
+    quantity_used INT,
+    distributed_at TIMESTAMP DEFAULT NOW()
+  );
+
   `);
 
-  console.log("✅ Tables Ready");
+  console.log("✅ Tables ready");
 }
 init();
 
-// ================= DATE FILTER =================
-function filterDate(query, type) {
-  if (type === "today")
-    return `${query} WHERE created_at::date = CURRENT_DATE`;
-
-  if (type === "week")
-    return `${query} WHERE created_at >= NOW() - INTERVAL '7 days'`;
-
-  if (type === "month")
-    return `${query} WHERE created_at >= NOW() - INTERVAL '30 days'`;
-
-  return query;
-}
-
 // ================= PARTICIPANTS =================
-app.post("/participants", async (req, res) => {
-  const { name, household, zip } = req.body;
+app.post("/participants", async (req,res)=>{
+  const {name, household, zip, repeat_visit} = req.body;
 
   await pool.query(
-    `INSERT INTO participants (name, household, zip)
-     VALUES ($1,$2,$3)`,
-    [name || null, household || 0, zip || null]
+    `INSERT INTO participants (name, household, zip, repeat_visit)
+     VALUES ($1,$2,$3,$4)`,
+    [name, household, zip, repeat_visit]
   );
 
-  res.json({ success: true });
+  res.json({success:true});
+});
+
+app.get("/participants", async (req,res)=>{
+  const data = await pool.query(`SELECT * FROM participants ORDER BY id DESC`);
+  res.json(data.rows);
+});
+
+app.delete("/participants/:id", async (req,res)=>{
+  await pool.query(`DELETE FROM participants WHERE id=$1`,[req.params.id]);
+  res.json({success:true});
 });
 
 // ================= VOLUNTEERS =================
-app.post("/volunteers", async (req, res) => {
-  const { name, role, shift_date } = req.body;
+app.post("/volunteers", async (req,res)=>{
+  const {name, role, shift_date} = req.body;
 
   await pool.query(
     `INSERT INTO volunteers (name, role, shift_date)
@@ -91,150 +87,110 @@ app.post("/volunteers", async (req, res) => {
     [name, role, shift_date]
   );
 
-  res.json({ success: true });
+  res.json({success:true});
+});
+
+app.get("/volunteers", async (req,res)=>{
+  const data = await pool.query(`SELECT * FROM volunteers ORDER BY id DESC`);
+  res.json(data.rows);
+});
+
+app.delete("/volunteers/:id", async (req,res)=>{
+  await pool.query(`DELETE FROM volunteers WHERE id=$1`,[req.params.id]);
+  res.json({success:true});
 });
 
 // ================= INVENTORY =================
-app.post("/inventory", async (req, res) => {
-  try {
-    const { name, number_of_boxes, items_per_box } = req.body;
-
-    const boxes = parseInt(number_of_boxes) || 0;
-    const perBox = parseInt(items_per_box) || 0;
-    const total = boxes * perBox;
-
-    await pool.query(
-      `INSERT INTO inventory
-       (name, number_of_boxes, items_per_box, quantity, remaining_quantity)
-       VALUES ($1,$2,$3,$4,$4)`,
-      [name || "", boxes, perBox, total]
-    );
-
-    res.json({ success: true });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Inventory save failed" });
-  }
-});
-
-app.get("/inventory", async (req, res) => {
-  const result = await pool.query(
-    `SELECT * FROM inventory ORDER BY id DESC`
-  );
-  res.json(result.rows);
-});
-
-// ================= END OF DAY UPDATE =================
-app.post("/inventory/reset", async (req, res) => {
-  const { id, remaining_quantity } = req.body;
-
-  const item = await pool.query(
-    `SELECT * FROM inventory WHERE id=$1`,
-    [id]
-  );
-
-  if (!item.rows.length) return res.status(404).send("Not found");
-
-  const used = item.rows[0].quantity - remaining_quantity;
+app.post("/inventory", async (req,res)=>{
+  const {name, quantity_received, source} = req.body;
 
   await pool.query(
-    `INSERT INTO usage_logs (inventory_id, name, used)
-     VALUES ($1,$2,$3)`,
-    [id, item.rows[0].name, used]
+    `INSERT INTO inventory (name, quantity_received, remaining_quantity, source)
+     VALUES ($1,$2,$2,$3)`,
+    [name, quantity_received, source]
+  );
+
+  res.json({success:true});
+});
+
+app.get("/inventory", async (req,res)=>{
+  const data = await pool.query(`SELECT * FROM inventory ORDER BY id DESC`);
+  res.json(data.rows);
+});
+
+app.delete("/inventory/:id", async (req,res)=>{
+  await pool.query(`DELETE FROM inventory WHERE id=$1`,[req.params.id]);
+  res.json({success:true});
+});
+
+// ================= DISTRIBUTION =================
+app.post("/inventory/distribute", async (req,res)=>{
+  const {inventory_id, quantity_used} = req.body;
+
+  await pool.query(
+    `INSERT INTO distribution (inventory_id, quantity_used)
+     VALUES ($1,$2)`,
+    [inventory_id, quantity_used]
   );
 
   await pool.query(
-    `UPDATE inventory SET remaining_quantity=$1 WHERE id=$2`,
-    [remaining_quantity, id]
+    `UPDATE inventory
+     SET remaining_quantity = remaining_quantity - $1
+     WHERE id=$2`,
+    [quantity_used, inventory_id]
   );
 
-  res.json({ success: true });
+  res.json({success:true});
+});
+
+// ================= REPORT SUMMARY =================
+app.get("/reports/summary", async (req,res)=>{
+  const data = await pool.query(`
+    SELECT i.id, i.name,
+    COALESCE(SUM(d.quantity_used),0) as total_used
+    FROM inventory i
+    LEFT JOIN distribution d ON i.id=d.inventory_id
+    GROUP BY i.id
+  `);
+
+  res.json(data.rows);
 });
 
 // ================= DASHBOARD =================
-app.get("/reports/dashboard", async (req, res) => {
-  const filter = req.query.filter || "all";
+app.get("/reports/dashboard", async (req,res)=>{
+  const p = await pool.query(`
+    SELECT COUNT(*) as households,
+    COALESCE(SUM(household),0) as individuals
+    FROM participants
+  `);
 
-  const p = await pool.query(
-    filterDate(
-      `SELECT COUNT(*) as households,
-       COALESCE(SUM(household),0) as individuals
-       FROM participants`,
-      filter
-    )
-  );
-
-  const u = await pool.query(`
-    SELECT COALESCE(SUM(used),0) as total FROM usage_logs
+  const d = await pool.query(`
+    SELECT COALESCE(SUM(quantity_used),0) as total FROM distribution
   `);
 
   res.json({
     households: parseInt(p.rows[0].households),
     individuals: parseInt(p.rows[0].individuals),
-    total_distributed: parseInt(u.rows[0].total)
+    total_distributed: parseInt(d.rows[0].total)
   });
 });
 
-// ================= REPORT =================
-app.get("/reports/usage", async (req, res) => {
-const result = await pool.query(`
-  SELECT name,
-  quantity as start,
-  remaining_quantity as remaining,
-  (quantity - remaining_quantity) as used,
-  created_at as date
-  FROM inventory
-`);
+// ================= FULL EXPORT =================
+app.get("/reports/full", async (req,res)=>{
+  const participants = await pool.query(`SELECT * FROM participants`);
+  const volunteers = await pool.query(`SELECT * FROM volunteers`);
+  const inventory = await pool.query(`SELECT * FROM inventory`);
+  const distribution = await pool.query(`SELECT * FROM distribution`);
 
-
-  res.json(result.rows);
+  res.json({
+    participants: participants.rows,
+    volunteers: volunteers.rows,
+    inventory: inventory.rows,
+    distribution: distribution.rows
+  });
 });
 
-// ================= EXPORT CSV =================
-app.get("/reports/export", async (req, res) => {
-  const p = await pool.query(`SELECT * FROM participants`);
-  const v = await pool.query(`SELECT * FROM volunteers`);
-  const i = await pool.query(`
-    SELECT name,
-    quantity,
-    remaining_quantity,
-    (quantity - remaining_quantity) as used,
-    created_at
-    FROM inventory
-  `);
-
-  let csv = "";
-
-  // PARTICIPANTS
-  csv += "PARTICIPANTS\n";
-  csv += "Name,Household,Zip,Date\n";
-  p.rows.forEach(x => {
-    csv += `${x.name},${x.household},${x.zip},${x.created_at}\n`;
-  });
-
-  csv += "\n";
-
-  // VOLUNTEERS
-  csv += "VOLUNTEERS\n";
-  csv += "Name,Role,Shift Date\n";
-  v.rows.forEach(x => {
-    csv += `${x.name},${x.role},${x.shift_date}\n`;
-  });
-
-  csv += "\n";
-
-  // INVENTORY
-  csv += "INVENTORY USAGE\n";
-  csv += "Item,Start,Remaining,Used,Date\n";
-  i.rows.forEach(x => {
-    csv += `${x.name},${x.quantity},${x.remaining_quantity},${x.used},${x.created_at}\n`;
-  });
-
-  res.header("Content-Type", "text/csv");
-  res.attachment("foodapp_report.csv");
-  res.send(csv);
-});
 // ================= SERVER =================
-app.listen(5000, () => {
+app.listen(5000, ()=>{
   console.log("🚀 Server running on port 5000");
 });
