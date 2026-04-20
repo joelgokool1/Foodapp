@@ -74,15 +74,23 @@ init();
 
 // ================= PARTICIPANTS =================
 app.post("/participants", async (req, res) => {
-  const { name, household, zip, repeat_visit } = req.body;
+  try {
+    const { name, household, zip, repeat_visit } = req.body;
 
-  await pool.query(
-    `INSERT INTO participants (name, household, zip, repeat_visit)
-     VALUES ($1,$2,$3,$4)`,
-    [name, household, zip, repeat_visit]
-  );
+    const h = parseInt(household) || 0;
 
-  res.json({ success: true });
+    await pool.query(
+      `INSERT INTO participants (name, household, zip, repeat_visit)
+       VALUES ($1,$2,$3,$4)`,
+      [name || "", h, zip || "", repeat_visit || false]
+    );
+
+    res.json({ success: true });
+
+  } catch (err) {
+    console.error("❌ PARTICIPANT ERROR:", err);
+    res.status(500).json({ error: "Participant save failed" });
+  }
 });
 
 app.get("/participants", async (req, res) => {
@@ -97,15 +105,21 @@ app.delete("/participants/:id", async (req, res) => {
 
 // ================= VOLUNTEERS =================
 app.post("/volunteers", async (req, res) => {
-  const { name, role, shift_date } = req.body;
+  try {
+    const { name, role, shift_date } = req.body;
 
-  await pool.query(
-    `INSERT INTO volunteers (name, role, shift_date)
-     VALUES ($1,$2,$3)`,
-    [name, role, shift_date]
-  );
+    await pool.query(
+      `INSERT INTO volunteers (name, role, shift_date)
+       VALUES ($1,$2,$3)`,
+      [name || "", role || "", shift_date]
+    );
 
-  res.json({ success: true });
+    res.json({ success: true });
+
+  } catch (err) {
+    console.error("❌ VOLUNTEER ERROR:", err);
+    res.status(500).json({ error: "Volunteer save failed" });
+  }
 });
 
 app.get("/volunteers", async (req, res) => {
@@ -120,15 +134,23 @@ app.delete("/volunteers/:id", async (req, res) => {
 
 // ================= INVENTORY =================
 app.post("/inventory", async (req, res) => {
-  const { name, quantity_received, source } = req.body;
+  try {
+    const { name, quantity_received, source } = req.body;
 
-  await pool.query(
-    `INSERT INTO inventory (name, quantity_received, remaining_quantity, source)
-     VALUES ($1,$2,$2,$3)`,
-    [name, quantity_received, source]
-  );
+    const qty = parseInt(quantity_received) || 0;
 
-  res.json({ success: true });
+    await pool.query(
+      `INSERT INTO inventory (name, quantity_received, remaining_quantity, source)
+       VALUES ($1,$2,$2,$3)`,
+      [name || "", qty, source || ""]
+    );
+
+    res.json({ success: true });
+
+  } catch (err) {
+    console.error("❌ INVENTORY ERROR:", err);
+    res.status(500).json({ error: "Inventory save failed" });
+  }
 });
 
 app.get("/inventory", async (req, res) => {
@@ -143,22 +165,30 @@ app.delete("/inventory/:id", async (req, res) => {
 
 // ================= DISTRIBUTE =================
 app.post("/inventory/distribute", async (req, res) => {
-  const { inventory_id, quantity_used } = req.body;
+  try {
+    const { inventory_id, quantity_used } = req.body;
 
-  await pool.query(
-    `INSERT INTO distribution (inventory_id, quantity_used)
-     VALUES ($1,$2)`,
-    [inventory_id, quantity_used]
-  );
+    const qty = parseInt(quantity_used) || 0;
 
-  await pool.query(
-    `UPDATE inventory
-     SET remaining_quantity = remaining_quantity - $1
-     WHERE id=$2`,
-    [quantity_used, inventory_id]
-  );
+    await pool.query(
+      `INSERT INTO distribution (inventory_id, quantity_used)
+       VALUES ($1,$2)`,
+      [inventory_id, qty]
+    );
 
-  res.json({ success: true });
+    await pool.query(
+      `UPDATE inventory
+       SET remaining_quantity = remaining_quantity - $1
+       WHERE id=$2`,
+      [qty, inventory_id]
+    );
+
+    res.json({ success: true });
+
+  } catch (err) {
+    console.error("❌ DISTRIBUTION ERROR:", err);
+    res.status(500).json({ error: "Distribution failed" });
+  }
 });
 
 // ================= REPORT =================
