@@ -340,12 +340,6 @@ async function loadInventory(){
       </td>
     </tr>`;
   });
-}
-  const qtyStart = item.boxes_start * item.items_per_box;
-  const boxesEnd = item.boxes_end || 0;
-  const qtyEnd = boxesEnd * item.items_per_box;
- \
-}
 
 inventoryForm.addEventListener("submit", async e=>{
   e.preventDefault();
