@@ -74,6 +74,7 @@ app.get("/volunteers", async (req, res) => {
 //
 // ================= INVENTORY (BOX MODEL) =================
 //
+// ================= INVENTORY (FIXED) =================
 app.post("/inventory", async (req, res) => {
   try {
     let { name, number_of_boxes, items_per_box, source } = req.body;
@@ -89,12 +90,12 @@ app.post("/inventory", async (req, res) => {
 
     const data = await prisma.inventory.create({
       data: {
-        name,
-        number_of_boxes,
-        items_per_box,
+        name: String(name),
+        number_of_boxes: number_of_boxes,
+        items_per_box: items_per_box,
         quantity: total_quantity,
         remaining_quantity: total_quantity,
-        source: source || "unknown",
+        source: source || null,
         created_at: new Date()
       }
     });
@@ -102,10 +103,11 @@ app.post("/inventory", async (req, res) => {
     res.json(data);
 
   } catch (err) {
-    console.error(err);
+    console.error("INVENTORY ERROR:", err);   // 🔥 IMPORTANT
     res.status(500).json({ error: err.message });
   }
 });
+
 
 app.get("/inventory", async (req, res) => {
   const data = await prisma.inventory.findMany({
