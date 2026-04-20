@@ -178,6 +178,7 @@ app.get("/reports/usage", async (req, res) => {
     FROM inventory
   `);
 
+
   res.json(result.rows);
 });
 
@@ -185,27 +186,46 @@ app.get("/reports/usage", async (req, res) => {
 app.get("/reports/export", async (req, res) => {
   const p = await pool.query(`SELECT * FROM participants`);
   const v = await pool.query(`SELECT * FROM volunteers`);
-  const u = await pool.query(`SELECT * FROM usage_logs`);
+  const i = await pool.query(`
+    SELECT name,
+    quantity,
+    remaining_quantity,
+    (quantity - remaining_quantity) as used,
+    created_at
+    FROM inventory
+  `);
 
-  let csv = "TYPE,NAME,VALUE,DATE\n";
+  let csv = "";
 
+  // PARTICIPANTS
+  csv += "PARTICIPANTS\n";
+  csv += "Name,Household,Zip,Date\n";
   p.rows.forEach(x => {
-    csv += `Participant,${x.name},${x.household},${x.created_at}\n`;
+    csv += `${x.name},${x.household},${x.zip},${x.created_at}\n`;
   });
 
+  csv += "\n";
+
+  // VOLUNTEERS
+  csv += "VOLUNTEERS\n";
+  csv += "Name,Role,Shift Date\n";
   v.rows.forEach(x => {
-    csv += `Volunteer,${x.name},${x.role},${x.shift_date}\n`;
+    csv += `${x.name},${x.role},${x.shift_date}\n`;
   });
 
-  u.rows.forEach(x => {
-    csv += `Inventory,${x.name},${x.used},${x.log_date}\n`;
+  csv += "\n";
+
+  // INVENTORY
+  csv += "INVENTORY USAGE\n";
+  csv += "Item,Start,Remaining,Used,Date\n";
+  i.rows.forEach(x => {
+    csv += `${x.name},${x.quantity},${x.remaining_quantity},${x.used},${x.created_at}\n`;
   });
 
   res.header("Content-Type", "text/csv");
-  res.attachment("report.csv");
+  res.attachment("foodapp_report.csv");
   res.send(csv);
 });
-
 // ================= SERVER =================
 app.listen(5000, () => {
   console.log("🚀 Server running on port 5000");
