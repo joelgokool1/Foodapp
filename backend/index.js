@@ -16,23 +16,22 @@ const pool = new Pool({
 async function init() {
 
   // PARTICIPANTS
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS participants (
-      id SERIAL PRIMARY KEY,
-      name TEXT,
-      household INT,
-      zip TEXT,
-      repeat_visit BOOLEAN,
-      visit_date TIMESTAMP DEFAULT NOW()
-    );
-  `);
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS participants (
+    id SERIAL PRIMARY KEY,
+    name TEXT,
+    household INT,
+    zip TEXT,
+    repeat_visit BOOLEAN,
+    visit_date TIMESTAMP DEFAULT NOW()
+  );
+`);
 
-  // 🔥 FORCE FIX (important)
-  await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS household INT`);
-  await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS zip TEXT`);
-  await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS repeat_visit BOOLEAN`);
-  await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS visit_date TIMESTAMP DEFAULT NOW()`);
-
+// 🔥 REQUIRED FIX
+await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS repeat_visit BOOLEAN`);
+await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS household INT`);
+await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS zip TEXT`);
+await pool.query(`ALTER TABLE participants ADD COLUMN IF NOT EXISTS visit_date TIMESTAMP DEFAULT NOW()`);
   // VOLUNTEERS
   await pool.query(`
     CREATE TABLE IF NOT EXISTS volunteers (
